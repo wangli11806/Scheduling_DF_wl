@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>客服排班系统 - 工作安排</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        body {
+            background: #f1f5f9; margin: 0; padding: 0;
+            display: flex; min-height: 100vh;
+            font-size: 13px; color: #1e293b;
+        }
+
+        .sidebar {
+            width: 190px; min-width: 190px; background: #1e293b; color: #e2e8f0;
+            display: flex; flex-direction: column;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+            position: sticky; top: 0; height: 100vh; overflow-y: auto;
+        }
+        .sidebar-logo {
+            padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
+            font-size: 1.15rem; font-weight: 700; color: white; letter-spacing: 0.5px;
+        }
+        .sidebar-nav { padding: 8px 0; flex: 1; }
+        .sidebar-nav .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 13px 18px; margin: 3px 10px; border-radius: 10px;
+            font-size: 1rem; cursor: pointer; transition: all 0.15s;
+            color: #cbd5e1; text-decoration: none; user-select: none;
+        }
+        .sidebar-nav .nav-item:hover { background: rgba(255,255,255,0.06); color: white; }
+        .sidebar-nav .nav-item.active {
+            background: rgba(99, 102, 241, 0.25); color: #a5b4fc; font-weight: 600;
+        }
+
+        .main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .header-bar {
+            background: white; padding: 14px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid #e8ecf1;
+        }
+        .header-bar h1 { font-size: 1.15rem; font-weight: 700; color: #1e293b; margin: 0; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .content-body { flex: 1; padding: 20px 28px; overflow-y: auto; overflow-x: auto; }
+
+        .top-bar {
+            display: flex; align-items: center; gap: 14px; margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .date-nav { display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 4px 12px; border-radius: 60px; }
+        .date-nav button {
+            background: none; border: none; font-size: 1.1rem; cursor: pointer;
+            width: 28px; height: 28px; border-radius: 30px; display: inline-flex;
+            align-items: center; justify-content: center; color: #475569;
+        }
+        .date-nav button:hover { background: #e2e8f0; }
+        .date-label { font-weight: 600; background: white; padding: 4px 14px; border-radius: 40px; font-size: 0.95rem; }
+
+        .filter-field { display: flex; flex-direction: column; gap: 5px; width: 260px; }
+        .filter-field label { font-size: 0.92rem; font-weight: 600; color: #64748b; }
+
+        .multi-select { position: relative; user-select: none; }
+        .multi-select-trigger {
+            display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
+            min-height: 34px; padding: 3px 8px; border: 1px solid #cbd5e1;
+            border-radius: 10px; background: white; cursor: pointer; font-size: 0.92rem;
+            transition: border-color 0.15s;
+        }
+        .multi-select-trigger:hover { border-color: #94a3b8; }
+        .multi-select.open .multi-select-trigger { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.12); }
+        .ms-tag {
+            display: inline-flex; align-items: center; gap: 2px;
+            background: #eef2ff; color: #3730a3; padding: 2px 7px; border-radius: 6px;
+            font-size: 0.85rem; font-weight: 500;
+        }
+        .ms-tag .ms-tag-x { cursor: pointer; font-size: 0.85rem; opacity: 0.6; }
+        .ms-tag .ms-tag-x:hover { opacity: 1; }
+        .ms-placeholder { color: #94a3b8; font-size: 0.92rem; }
+        .ms-dropdown {
+            display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px;
+            background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 100; max-height: 280px; overflow: hidden;
+        }
+        .multi-select.open .ms-dropdown { display: block; }
+        .ms-search { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 6px; align-items: center; }
+        .ms-search input { flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; font-size: 0.92rem; outline: none; }
+        .ms-search input:focus { border-color: #6366f1; }
+        .ms-select-all { font-size: 0.85rem; color: #6366f1; cursor: pointer; white-space: nowrap; padding: 5px 10px; border-radius: 6px; font-weight: 600; border: 1px solid #c7d2fe; background: #eef2ff; }
+        .ms-select-all:hover { background: #e0e7ff; }
+        .ms-options { max-height: 180px; overflow-y: auto; padding: 4px 0; }
+        .ms-option { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 0.92rem; cursor: pointer; transition: background 0.1s; }
+        .ms-option:hover { background: #f8fafc; }
+        .ms-option input[type="checkbox"] { accent-color: #6366f1; }
+        .ms-actions { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid #e2e8f0; justify-content: flex-end; }
+
+        .btn {
+            background: white; border: 1px solid #cbd5e1; padding: 7px 18px;
+            border-radius: 40px; font-weight: 500; font-size: 0.92rem; cursor: pointer;
+            transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px;
+            color: #1e293b; white-space: nowrap;
+        }
+        .btn:hover { background: #f8fafc; border-color: #94a3b8; }
+        .btn-primary { background: #2c3e66; border-color: #2c3e66; color: white; }
+        .btn-primary:hover { background: #1e2f4a; }
+        .btn-sm { padding: 5px 12px; font-size: 0.85rem; }
+
+        .radio-group {
+            display: inline-flex; gap: 2px; background: #eef2ff; border-radius: 60px; padding: 3px;
+        }
+        .radio-opt {
+            display: inline-flex; align-items: center; padding: 5px 14px;
+            border-radius: 40px; font-size: 0.88rem; font-weight: 500; color: #64748b;
+            cursor: pointer; transition: all 0.15s; user-select: none;
+        }
+        .radio-opt:has(input:checked) { background: white; color: #1e3a5f; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .radio-opt input { display: none; }
+
+        /* 安排表格 */
+        .assign-table-wrapper {
+            overflow-x: auto; border-radius: 16px; background: white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03); border: 1px solid #e8ecf1;
+        }
+        .assign-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 1100px; }
+        .assign-table th, .assign-table td {
+            border: 1px solid #e8ecf1; padding: 6px 4px; text-align: center; vertical-align: middle;
+        }
+        .assign-table thead th {
+            background: #f9fbfd; font-weight: 700; color: #2c3e66; font-size: 0.82rem;
+            padding: 10px 4px; position: sticky; top: 0; z-index: 2;
+        }
+        .assign-table .col-shift { width: 44px; }
+        .assign-table .col-name { width: 66px; }
+        .assign-table .col-team { width: 60px; }
+        .assign-table .col-work { width: 58px; }
+        .assign-table .col-meal { width: 100px; }
+
+        .assign-table tbody td { height: 38px; }
+        .assign-table tbody tr:hover td { background: #eef2ff; }
+        .assign-table tbody tr.summary-row:hover td { background: #f0f4ff; }
+        .assign-table .summary-row td {
+            background: #f0f4ff !important; font-weight: 600; color: #475569; font-size: 0.82rem;
+        }
+        .assign-table .summary-row td.col-shift,
+        .assign-table .summary-row td.col-name { color: #94a3b8; }
+
+        .work-cell {
+            cursor: pointer; user-select: none; transition: background 0.15s;
+            font-weight: 600; font-size: 0.82rem;
+        }
+        .work-cell.assigned { background: #fff3e0 !important; color: #e65100; }
+        .work-cell.unassigned { background: #f5f5f5 !important; color: #ccc; }
+
+        .meal-select {
+            width: 100%; padding: 4px 2px; border: 1px solid #e2e8f0;
+            border-radius: 6px; font-size: 0.78rem; background: white;
+            color: #1e293b; cursor: pointer; text-align: center;
+        }
+        .meal-select:focus { border-color: #6366f1; outline: none; }
+
+        .emp-name-cell { font-weight: 600; font-size: 0.85rem; color: #1e293b; }
+        .emp-shift-cell { font-size: 0.8rem; font-weight: 500; }
+
+        .toast-msg {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: #1e293b; color: white; padding: 10px 24px; border-radius: 60px;
+            font-size: 0.92rem; z-index: 1000; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+            transition: 0.2s; pointer-events: none;
+        }
+
+        @media (max-width: 860px) {
+            body { flex-direction: column; }
+            .sidebar { width: 100%; min-width: auto; height: auto; position: relative; flex-direction: row; flex-wrap: wrap; padding: 10px 14px; gap: 6px; align-items: center; }
+            .sidebar-logo { padding: 0; border-bottom: none; }
+            .sidebar-nav { display: flex; padding: 0; gap: 4px; }
+            .sidebar-nav .nav-item { margin: 0; padding: 8px 12px; }
+            .content-body { padding: 14px 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<aside class="sidebar">
+    <div class="sidebar-logo">客服排班系统</div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" data-page="overview" href="总览.html">总览</a>
+        <a class="nav-item" data-page="schedule" href="排班表.html">排班表</a>
+        <a class="nav-item active" data-page="work" href="工作安排.html">工作安排</a>
+        <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
+        <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
+        <a class="nav-item" data-page="stats">排班统计</a>
+    </nav>
+</aside>
+
+<div class="main-area">
+    <div class="header-bar">
+        <h1>工作安排</h1>
+        <div class="header-right">
+            <button class="btn btn-primary" id="saveBtn">保存</button>
+        </div>
+    </div>
+    <div class="content-body">
+        <div class="top-bar">
+            <div class="date-nav">
+                <button id="prevDateBtn">◀</button>
+                <div class="date-label" id="dateLabel">加载中...</div>
+                <button id="nextDateBtn">▶</button>
+            </div>
+            <div class="filter-field">
+                <label>班次筛选</label>
+                <div class="multi-select" id="filterShift">
+                    <div class="multi-select-trigger" id="filterShiftTrigger">
+                        <span class="ms-placeholder">全部班次</span>
+                    </div>
+                    <div class="ms-dropdown">
+                        <div class="ms-search">
+                            <input type="text" placeholder="搜索..." id="filterShiftSearch">
+                            <span class="ms-select-all" id="filterShiftAll">全选</span>
+                        </div>
+                        <div class="ms-options" id="filterShiftOptions"></div>
+                        <div class="ms-actions">
+                            <button class="btn btn-sm" id="filterShiftClear">清除</button>
+                            <button class="btn btn-sm btn-primary" id="filterShiftOk">确定</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-field" style="width:auto;flex:none;">
+                <label>岗位筛选</label>
+                <div class="radio-group" id="filterPosition">
+                    <label class="radio-opt"><input type="radio" name="filterPos" value=""> 全部</label>
+                    <label class="radio-opt"><input type="radio" name="filterPos" value="客服" checked> 客服</label>
+                    <label class="radio-opt"><input type="radio" name="filterPos" value="主管"> 主管</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="assign-table-wrapper">
+            <table class="assign-table" id="assignTable">
+                <thead id="assignTableHead"></thead>
+                <tbody id="assignTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="toastMsg" class="toast-msg" style="display:none;"></div>
+
+<script>
+const API_BASE = '/api';
+const WORK_TYPES = ["热线","在线","工单","反向工单","自主售后","售后单","紧急","本地生活","卡密查询"];
+const LUNCH_SLOTS = ["","11:30-12:00","12:00-12:30","12:30-13:00","13:00-13:30","13:30-14:00"];
+const DINNER_SLOTS = ["","17:00-17:30","17:30-18:00","18:00-18:30","18:30-19:00","19:00-19:30","19:30-20:00"];
+const LEAVE_SHIFTS = new Set(["休息","放休","请假"]);
+
+let currentDate = new Date();
+let employees = [];
+let scheduleMap = new Map();
+let assignmentMap = {};  // employee_name → {work_types:[], lunch_slot, dinner_slot}
+let shiftOptions = [];
+let filterSelectedShifts = [];
+
+async function apiGet(url) {
+    const res = await fetch(API_BASE + url);
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || '请求失败'); }
+    return res.json();
+}
+
+async function apiPost(url, data) {
+    const res = await fetch(API_BASE + url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+    return res.json();
+}
+
+function showToast(msg) {
+    const t = document.getElementById("toastMsg");
+    t.innerText = msg; t.style.display = "block";
+    setTimeout(() => { t.style.display = "none"; }, 2500);
+}
+
+function formatDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function getShift(dateStr, empName) {
+    return scheduleMap.get(`${dateStr}|${empName}`) || "";
+}
+
+async function loadData() {
+    const dateStr = formatDate(currentDate);
+    const [emps, schedules, shifts, assignments] = await Promise.all([
+        apiGet('/employees?status=active'),
+        apiGet('/schedules?start=' + dateStr + '&end=' + dateStr),
+        apiGet('/shifts'),
+        apiGet('/assignments?date=' + dateStr)
+    ]);
+    employees = emps;
+    scheduleMap.clear();
+    schedules.forEach(s => { scheduleMap.set(`${s.schedule_date}|${s.employee_name}`, s.shift_name); });
+    shiftOptions = shifts.map(s => s.name);
+    assignmentMap = {};
+    assignments.forEach(a => { assignmentMap[a.employee_name] = a; });
+}
+
+function getWorkingEmployees() {
+    const dateStr = formatDate(currentDate);
+    return employees.filter(e => {
+        const shift = getShift(dateStr, e.name);
+        return shift && !LEAVE_SHIFTS.has(shift);
+    });
+}
+
+function getShiftClass(shift) {
+    if (!shift) return "";
+    const cls = "shift-" + shift;
+    return cls in {
+        "shift-A班":1,"shift-B班":1,"shift-C班":1,"shift-T班":1,
+        "shift-E班":1,"shift-F班":1,"shift-休息":1,"shift-放休":1,"shift-请假":1
+    } ? cls : "";
+}
+
+function renderTable() {
+    const dateStr = formatDate(currentDate);
+    let working = getWorkingEmployees();
+
+    // 岗位筛选
+    const filterPos = document.querySelector('input[name="filterPos"]:checked').value;
+    if (filterPos) {
+        working = working.filter(e => e.position === filterPos);
+    }
+
+    // 按班次筛选
+    if (filterSelectedShifts.length > 0 && filterSelectedShifts.length < shiftOptions.length) {
+        working = working.filter(e => filterSelectedShifts.includes(getShift(dateStr, e.name)));
+    }
+
+    // 排序：班次 → 团队 → 姓名
+    const TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
+    working.sort((a, b) => {
+        const sa = getShift(dateStr, a.name);
+        const sb = getShift(dateStr, b.name);
+        if (sa !== sb) return (sa || "").localeCompare(sb || "");
+        const ta = TEAM_ORDER.indexOf(a.team), tb = TEAM_ORDER.indexOf(b.team);
+        if (ta !== tb) return (ta === -1 ? 999 : ta) - (tb === -1 ? 999 : tb);
+        return a.name.localeCompare(b.name, 'zh');
+    });
+
+    // 表头
+    document.getElementById("assignTableHead").innerHTML = `
+        <tr>
+            <th class="col-shift">班次</th>
+            <th class="col-team">团队</th>
+            <th class="col-name">姓名</th>
+            ${WORK_TYPES.map(w => `<th class="col-work">${w}</th>`).join('')}
+            <th class="col-meal">午餐</th>
+            <th class="col-meal">晚餐</th>
+        </tr>`;
+
+    // 汇总行：统计每个工作类型被安排的人数
+    const workCounts = {};
+    WORK_TYPES.forEach(w => { workCounts[w] = 0; });
+    let lunchCount = 0, dinnerCount = 0;
+    working.forEach(e => {
+        const assign = assignmentMap[e.name];
+        if (assign && assign.work_types) {
+            assign.work_types.forEach(w => {
+                if (workCounts.hasOwnProperty(w)) workCounts[w]++;
+            });
+        }
+        if (assign && assign.lunch_slot) lunchCount++;
+        if (assign && assign.dinner_slot) dinnerCount++;
+    });
+
+    // 数据行
+    const bodyHTML = [
+        `<tr class="summary-row">
+            <td class="col-shift"></td>
+            <td class="col-team"></td>
+            <td class="col-name">${working.length}人</td>
+            ${WORK_TYPES.map(w => `<td class="col-work">${workCounts[w] || ''}</td>`).join('')}
+            <td class="col-meal">${lunchCount || ''}</td>
+            <td class="col-meal">${dinnerCount || ''}</td>
+        </tr>`,
+        ...working.map(e => {
+            const assign = assignmentMap[e.name] || { work_types: [], lunch_slot: '', dinner_slot: '' };
+            const myWorks = new Set(assign.work_types || []);
+            const shift = getShift(dateStr, e.name);
+            return `
+                <tr data-emp="${e.name}">
+                    <td class="col-shift emp-shift-cell ${getShiftClass(shift)}" style="font-weight:600;">${shift}</td>
+                    <td class="col-team" style="font-size:0.82rem;color:#475569;font-weight:600;">${e.team}</td>
+                    <td class="col-name emp-name-cell">${e.name}${e.position==='主管'?' 👑':''}</td>
+                    ${WORK_TYPES.map(w => {
+                        const assigned = myWorks.has(w);
+                        return `<td class="col-work work-cell ${assigned ? 'assigned' : 'unassigned'}" data-work="${w}">${assigned ? '1' : ''}</td>`;
+                    }).join('')}
+                    <td class="col-meal">
+                        <select class="meal-select lunch-select" data-emp="${e.name}">
+                            ${LUNCH_SLOTS.map(s => `<option value="${s}" ${assign.lunch_slot === s ? 'selected' : ''}>${s || '-'}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td class="col-meal">
+                        <select class="meal-select dinner-select" data-emp="${e.name}">
+                            ${DINNER_SLOTS.map(s => `<option value="${s}" ${assign.dinner_slot === s ? 'selected' : ''}>${s || '-'}</option>`).join('')}
+                        </select>
+                    </td>
+                </tr>`;
+        })
+    ].join('');
+
+    document.getElementById("assignTableBody").innerHTML = bodyHTML;
+
+    // 工作类型单元格点击事件
+    document.querySelectorAll('.work-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+            const empName = cell.closest('tr').getAttribute('data-emp');
+            const workType = cell.getAttribute('data-work');
+            if (!assignmentMap[empName]) {
+                assignmentMap[empName] = { work_types: [], lunch_slot: '', dinner_slot: '' };
+            }
+            const works = assignmentMap[empName].work_types;
+            const idx = works.indexOf(workType);
+            if (idx >= 0) {
+                works.splice(idx, 1);
+            } else {
+                works.push(workType);
+            }
+            // 局部更新单元格样式
+            if (works.includes(workType)) {
+                cell.classList.add('assigned');
+                cell.classList.remove('unassigned');
+                cell.textContent = '1';
+            } else {
+                cell.classList.add('unassigned');
+                cell.classList.remove('assigned');
+                cell.textContent = '';
+            }
+            updateSummaryRow();
+        });
+    });
+
+    // 用餐下拉变更：同步到 assignmentMap
+    document.querySelectorAll('.lunch-select').forEach(sel => {
+        sel.addEventListener('change', () => {
+            const empName = sel.getAttribute('data-emp');
+            if (!assignmentMap[empName]) {
+                assignmentMap[empName] = { work_types: [], lunch_slot: '', dinner_slot: '' };
+            }
+            assignmentMap[empName].lunch_slot = sel.value;
+        });
+    });
+    document.querySelectorAll('.dinner-select').forEach(sel => {
+        sel.addEventListener('change', () => {
+            const empName = sel.getAttribute('data-emp');
+            if (!assignmentMap[empName]) {
+                assignmentMap[empName] = { work_types: [], lunch_slot: '', dinner_slot: '' };
+            }
+            assignmentMap[empName].dinner_slot = sel.value;
+        });
+    });
+}
+
+function updateSummaryRow() {
+    const working = getWorkingEmployees();
+    const dateStr = formatDate(currentDate);
+    const filterPos = document.querySelector('input[name="filterPos"]:checked').value;
+    const filtered = working.filter(e => {
+        if (filterPos && e.position !== filterPos) return false;
+        if (filterSelectedShifts.length > 0 && filterSelectedShifts.length < shiftOptions.length) {
+            return filterSelectedShifts.includes(getShift(dateStr, e.name));
+        }
+        return true;
+    });
+
+    const workCounts = {};
+    WORK_TYPES.forEach(w => { workCounts[w] = 0; });
+    let lunchCount = 0, dinnerCount = 0;
+    filtered.forEach(e => {
+        const assign = assignmentMap[e.name];
+        if (assign && assign.work_types) {
+            assign.work_types.forEach(w => {
+                if (workCounts.hasOwnProperty(w)) workCounts[w]++;
+            });
+        }
+        if (assign && assign.lunch_slot) lunchCount++;
+        if (assign && assign.dinner_slot) dinnerCount++;
+    });
+
+    const summaryCells = document.querySelectorAll('.summary-row td');
+    if (summaryCells.length > 0) {
+        summaryCells[2].textContent = filtered.length + '人';
+        for (let i = 0; i < WORK_TYPES.length; i++) {
+            const cnt = workCounts[WORK_TYPES[i]];
+            summaryCells[3 + i].textContent = cnt || '';
+        }
+        summaryCells[3 + WORK_TYPES.length].textContent = lunchCount || '';
+        summaryCells[4 + WORK_TYPES.length].textContent = dinnerCount || '';
+    }
+}
+
+async function saveData() {
+    const dateStr = formatDate(currentDate);
+    const working = getWorkingEmployees();
+    const assignments = [];
+    working.forEach(e => {
+        const assign = assignmentMap[e.name];
+        if (assign) {
+            assignments.push({
+                employee_name: e.name,
+                work_types: assign.work_types || [],
+                lunch_slot: assign.lunch_slot || '',
+                dinner_slot: assign.dinner_slot || ''
+            });
+        }
+    });
+    try {
+        const result = await apiPost('/assignments', { date: dateStr, assignments });
+        showToast(`已保存 ${result.updated} 条工作安排`);
+    } catch(e) {
+        showToast('保存失败: ' + e.message);
+    }
+}
+
+async function changeDate(delta) {
+    currentDate.setDate(currentDate.getDate() + delta);
+    await loadData();
+    filterSelectedShifts = [...shiftOptions];
+    msShift.renderTrigger();
+    msShift.renderDropdown();
+    renderTable();
+    updateDateLabel();
+}
+
+function updateDateLabel() {
+    const weekNames = ["日","一","二","三","四","五","六"];
+    document.getElementById("dateLabel").textContent =
+        `${formatDate(currentDate)} 星期${weekNames[currentDate.getDay()]}`;
+}
+
+let msShift;
+
+function initMultiSelect(config) {
+    const { containerId, triggerId, searchId, selectAllId, optionsId, clearId, okId, getOptions, getSelected, setSelected, placeholder, onChange } = config;
+    const container = document.getElementById(containerId);
+    const trigger = document.getElementById(triggerId);
+    const searchInput = document.getElementById(searchId);
+    const selectAllBtn = document.getElementById(selectAllId);
+    const optionsContainer = document.getElementById(optionsId);
+
+    function renderTrigger() {
+        const sel = getSelected();
+        const allOpts = getOptions();
+        if (sel.length === 0) {
+            trigger.innerHTML = `<span class="ms-placeholder">${placeholder || '请选择'}</span>`;
+        } else if (sel.length === allOpts.length && allOpts.length > 0) {
+            trigger.innerHTML = `<span class="ms-placeholder" style="color:#3730a3;font-weight:500;">全部 (${allOpts.length})</span>`;
+        } else {
+            trigger.innerHTML = sel.map(v => `<span class="ms-tag">${v}<span class="ms-tag-x" data-val="${v}">×</span></span>`).join('');
+            trigger.querySelectorAll('.ms-tag-x').forEach(x => {
+                x.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    setSelected(getSelected().filter(v => v !== x.getAttribute('data-val')));
+                    renderDropdown();
+                    renderTrigger();
+                    if (onChange) onChange();
+                });
+            });
+        }
+    }
+
+    function renderDropdown() {
+        const sel = getSelected();
+        const q = searchInput.value.toLowerCase();
+        const allOpts = getOptions();
+        const opts = allOpts.filter(o => o.toLowerCase().includes(q));
+        selectAllBtn.textContent = (sel.length === allOpts.length && allOpts.length > 0) ? '取消全选' : '全选';
+        optionsContainer.innerHTML = opts.map(o => {
+            const checked = sel.includes(o) ? 'checked' : '';
+            return `<label class="ms-option"><input type="checkbox" value="${o}" ${checked}> ${o}</label>`;
+        }).join('');
+        if (opts.length === 0) {
+            optionsContainer.innerHTML = `<div style="padding:16px;text-align:center;color:#94a3b8;">无匹配选项</div>`;
+        }
+        optionsContainer.querySelectorAll('input').forEach(cb => {
+            cb.addEventListener('change', () => {
+                if (cb.checked) setSelected([...getSelected(), cb.value]);
+                else setSelected(getSelected().filter(v => v !== cb.value));
+                renderTrigger();
+                if (onChange) onChange();
+            });
+        });
+    }
+
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = container.classList.contains('open');
+        document.querySelectorAll('.multi-select.open').forEach(ms => ms.classList.remove('open'));
+        if (!isOpen) {
+            container.classList.add('open');
+            searchInput.value = '';
+            renderDropdown();
+            setTimeout(() => searchInput.focus(), 50);
+        }
+    });
+    searchInput.addEventListener('input', renderDropdown);
+    searchInput.addEventListener('click', e => e.stopPropagation());
+    selectAllBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const allOpts = getOptions();
+        setSelected(getSelected().length === allOpts.length && allOpts.length > 0 ? [] : [...allOpts]);
+        renderTrigger();
+        renderDropdown();
+        if (onChange) onChange();
+    });
+    document.getElementById(clearId).addEventListener('click', () => {
+        setSelected([]);
+        renderTrigger();
+        renderDropdown();
+        if (onChange) onChange();
+    });
+    document.getElementById(okId).addEventListener('click', () => { container.classList.remove('open'); });
+    document.addEventListener('click', () => { container.classList.remove('open'); });
+    renderTrigger();
+    return { renderTrigger, renderDropdown };
+}
+
+async function init() {
+    await loadData();
+    filterSelectedShifts = [...shiftOptions];
+
+    msShift = initMultiSelect({
+        containerId: 'filterShift', triggerId: 'filterShiftTrigger',
+        searchId: 'filterShiftSearch', selectAllId: 'filterShiftAll',
+        optionsId: 'filterShiftOptions', clearId: 'filterShiftClear',
+        okId: 'filterShiftOk', placeholder: '全部班次',
+        getOptions: () => shiftOptions,
+        getSelected: () => filterSelectedShifts,
+        setSelected: (v) => { filterSelectedShifts = v; },
+        onChange: () => { renderTable(); }
+    });
+
+    renderTable();
+    updateDateLabel();
+
+    document.getElementById("prevDateBtn").addEventListener("click", () => changeDate(-1));
+    document.getElementById("nextDateBtn").addEventListener("click", () => changeDate(1));
+    document.getElementById("saveBtn").addEventListener("click", saveData);
+
+    document.querySelectorAll('input[name="filterPos"]').forEach(radio => {
+        radio.addEventListener('change', () => renderTable());
+    });
+
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const page = item.getAttribute('data-page');
+            const pageMap = {
+                overview: '总览.html', schedule: '排班表.html',
+                employees: '员工管理.html', shifts: '班次设置.html', work: '工作安排.html'
+            };
+            if (pageMap[page]) {
+                window.location.href = pageMap[page];
+            } else {
+                e.preventDefault();
+                showToast('该页面尚未开通，敬请期待');
+            }
+        });
+    });
+}
+init();
+</script>
+</body>
+</html>

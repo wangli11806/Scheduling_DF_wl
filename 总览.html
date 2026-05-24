@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>客服排班系统 - 总览</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        body {
+            background: #f1f5f9; margin: 0; padding: 0;
+            display: flex; min-height: 100vh;
+            font-size: 13px; color: #1e293b;
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: 190px; min-width: 190px; background: #1e293b; color: #e2e8f0;
+            display: flex; flex-direction: column;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+            position: sticky; top: 0; height: 100vh; overflow-y: auto;
+        }
+        .sidebar-logo {
+            padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
+            font-size: 1.15rem; font-weight: 700; color: white; letter-spacing: 0.5px;
+        }
+        .sidebar-nav { padding: 8px 0; flex: 1; }
+        .sidebar-nav .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 13px 18px; margin: 3px 10px; border-radius: 10px;
+            font-size: 1rem; cursor: pointer; transition: all 0.15s;
+            color: #cbd5e1; text-decoration: none; user-select: none;
+        }
+        .sidebar-nav .nav-item:hover { background: rgba(255,255,255,0.06); color: white; }
+        .sidebar-nav .nav-item.active {
+            background: rgba(99, 102, 241, 0.25); color: #a5b4fc; font-weight: 600;
+        }
+
+        /* 主区域 */
+        .main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .header-bar {
+            background: white; padding: 14px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid #e8ecf1;
+        }
+        .header-bar h1 { font-size: 1.15rem; font-weight: 700; color: #1e293b; margin: 0; }
+        .header-date { font-size: 0.95rem; color: #64748b; font-weight: 500; }
+        .content-body { flex: 1; padding: 20px 28px; overflow-y: auto; }
+
+        /* 日期标题 */
+        .date-title { font-size: 1.3rem; font-weight: 700; color: #1e293b; margin-bottom: 18px; }
+
+        /* 指标卡片 */
+        .stat-cards { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+        .stat-card {
+            flex: 1; min-width: 160px; background: white; border-radius: 16px;
+            padding: 20px 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+            border: 1px solid #e8ecf1;
+        }
+        .stat-card .stat-icon { font-size: 1.5rem; margin-bottom: 8px; }
+        .stat-card .stat-value { font-size: 2.8rem; font-weight: 700; color: #1e293b; line-height: 1.2; }
+        .stat-card .stat-label { font-size: 0.85rem; color: #94a3b8; margin-top: 4px; }
+        .stat-card .stat-sub { font-size: 0.82rem; color: #64748b; margin-top: 2px; }
+        .stat-delta { font-size: 0.82rem; font-weight: 600; margin-left: 4px; }
+        .stat-delta.up { color: #10b981; }
+        .stat-delta.down { color: #ef4444; }
+        .stat-card.sup { border-left: 4px solid #f59e0b; }
+        .stat-card.total { border-left: 4px solid #6366f1; }
+        .stat-card.work { border-left: 4px solid #10b981; }
+        .stat-card.rest { border-left: 4px solid #94a3b8; }
+
+        /* 团队卡片网格 */
+        .section-title { font-size: 1rem; font-weight: 700; color: #1e293b; margin-bottom: 14px; }
+        .team-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+        .team-card {
+            background: white; border-radius: 16px; padding: 22px 24px; min-height: 120px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03); border: 1px solid #e8ecf1;
+        }
+        .team-card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9;
+        }
+        .team-card-name { font-weight: 700; font-size: 0.95rem; color: #1e293b; }
+        .team-card-count { font-size: 0.82rem; color: #64748b; font-weight: 500; }
+        .team-card-empty { color: #94a3b8; font-size: 0.85rem; text-align: center; padding: 16px 0; }
+
+        .shift-group { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+        .shift-group .shift-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-size: 0.78rem; font-weight: 600; white-space: nowrap; min-width: 36px; text-align: center;
+            cursor: default;
+        }
+        .shift-group .shift-names { font-size: 0.85rem; color: #334155; line-height: 1.6; flex: 1; }
+
+        /* 班次悬浮提示 */
+        .shift-tooltip {
+            position: fixed; z-index: 999; pointer-events: none;
+            background: #1e293b; color: white; padding: 6px 14px;
+            border-radius: 8px; font-size: 0.85rem; font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            white-space: nowrap; display: none;
+        }
+        .shift-badge.A班 { background: #bbdefb; color: #1565c0; }
+        .shift-badge.B班 { background: #b2dfdb; color: #00695c; }
+        .shift-badge.C班 { background: #e1bee7; color: #7b1fa2; }
+        .shift-badge.T班 { background: #c5cae9; color: #283593; }
+        .shift-badge.E班 { background: #fff9c4; color: #f57f17; }
+        .shift-badge.F班 { background: #f8bbd0; color: #ad1457; }
+
+        .toast-msg {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: #1e293b; color: white; padding: 10px 24px; border-radius: 60px;
+            font-size: 0.92rem; z-index: 1000; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+            transition: 0.2s; pointer-events: none;
+        }
+
+        @media (max-width: 860px) {
+            body { flex-direction: column; }
+            .sidebar { width: 100%; min-width: auto; height: auto; position: relative; flex-direction: row; flex-wrap: wrap; padding: 10px 14px; gap: 6px; align-items: center; }
+            .sidebar-logo { padding: 0; border-bottom: none; }
+            .sidebar-nav { display: flex; padding: 0; gap: 4px; }
+            .sidebar-nav .nav-item { margin: 0; padding: 8px 12px; }
+            .content-body { padding: 14px 12px; }
+            .stat-cards { flex-direction: column; }
+            .team-grid { grid-template-columns: repeat(2, 1fr); }
+            .assign-table { min-width: 900px; }
+        }
+
+        /* 工作安排汇总表 */
+        .assign-section { margin-top: 24px; }
+        .assign-table-wrapper {
+            overflow-x: auto; border-radius: 16px; background: white;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03); border: 1px solid #e8ecf1;
+        }
+        .assign-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 1000px; }
+        .assign-table th, .assign-table td {
+            border: 1px solid #ecf3fa; padding: 5px 3px; text-align: center; vertical-align: middle;
+        }
+        .assign-table thead th {
+            background: #f9fbfd; font-weight: 700; color: #2c3e66; font-size: 0.78rem; padding: 8px 3px;
+        }
+        .assign-table .col-shift { width: 42px; }
+        .assign-table .col-team { width: 54px; }
+        .assign-table .col-name { width: 56px; }
+        .assign-table .col-work { width: 50px; }
+        .assign-table .col-meal { width: 90px; }
+        .assign-table .summary-row td {
+            background: #f0f4ff; font-weight: 600; color: #475569; font-size: 0.78rem;
+        }
+        .assign-table .assigned { background: #fff3e0; color: #e65100; font-weight: 600; }
+        .assign-table .unassigned { background: #f9f9f9; color: #ddd; }
+        .assign-table .emp-name-cell { font-weight: 600; font-size: 0.82rem; color: #1e293b; }
+        .assign-table .emp-shift-cell { font-size: 0.78rem; font-weight: 500; }
+        .assign-table .meal-cell { font-size: 0.78rem; color: #475569; }
+    </style>
+</head>
+<body>
+
+<aside class="sidebar">
+    <div class="sidebar-logo">客服排班系统</div>
+    <nav class="sidebar-nav">
+        <a class="nav-item active" data-page="overview" href="总览.html">总览</a>
+        <a class="nav-item" data-page="schedule" href="排班表.html">排班表</a>
+        <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
+        <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
+        <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
+        <a class="nav-item" data-page="stats">排班统计</a>
+    </nav>
+</aside>
+
+<div class="main-area">
+    <div class="header-bar">
+        <h1>总览</h1>
+        <span class="header-date" id="headerDate"></span>
+    </div>
+    <div class="content-body">
+        <!-- 日期标题 -->
+        <div class="date-title" id="dateTitle"></div>
+        <!-- 指标卡片 -->
+        <div class="stat-cards" id="statCards"></div>
+
+        <!-- 团队看板 -->
+        <div class="section-title">团队排班详情</div>
+        <div class="team-grid" id="teamGrid"></div>
+
+        <!-- 今日工作安排 -->
+        <div class="assign-section">
+            <div class="section-title">今日工作安排</div>
+            <div class="assign-table-wrapper">
+                <table class="assign-table" id="assignTable">
+                    <thead id="assignTableHead"></thead>
+                    <tbody id="assignTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toastMsg" class="toast-msg" style="display:none;"></div>
+<div id="shiftTooltip" class="shift-tooltip"></div>
+
+<script>
+const API_BASE = '/api';
+const WORK_TYPES = ["热线","在线","工单","反向工单","自主售后","售后单","紧急","本地生活","卡密查询"];
+
+async function apiGet(url) {
+    const res = await fetch(API_BASE + url);
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || '请求失败'); }
+    return res.json();
+}
+
+function showToast(msg) {
+    const t = document.getElementById("toastMsg");
+    t.innerText = msg; t.style.display = "block";
+    setTimeout(() => { t.style.display = "none"; }, 2500);
+}
+
+function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function yesterdayStr() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+const LEAVE_SHIFTS = new Set(["休息","放休","请假"]);
+
+function countWorking(scheduleMap, people) {
+    let w = 0;
+    people.forEach(p => {
+        const s = scheduleMap[p.name];
+        if (s && !LEAVE_SHIFTS.has(s)) w++;
+    });
+    return w;
+}
+
+function getShiftClass(shift) {
+    if (!shift) return "";
+    const cls = "shift-" + shift;
+    return cls in {
+        "shift-A班":1,"shift-B班":1,"shift-C班":1,"shift-T班":1,
+        "shift-E班":1,"shift-F班":1,"shift-休息":1,"shift-放休":1,"shift-请假":1
+    } ? cls : "";
+}
+
+let shiftDataMap = {};
+
+function renderAssignments(scheduleMap, agents, assignments) {
+    const assignMap = {};
+    assignments.forEach(a => { assignMap[a.employee_name] = a; });
+
+    // 只显示今日上班的员工（有排班且非休息/请假/放休）
+    const working = agents.filter(a => {
+        const shift = scheduleMap[a.name];
+        return shift && !LEAVE_SHIFTS.has(shift);
+    });
+
+    if (working.length === 0) {
+        document.getElementById("assignTableHead").innerHTML = "";
+        document.getElementById("assignTableBody").innerHTML = `<tr><td colspan="14" style="padding:24px;text-align:center;color:#94a3b8;">今日暂无工作安排</td></tr>`;
+        return;
+    }
+
+    // 排序：班次 → 团队 → 姓名
+    const TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
+    working.sort((a, b) => {
+        const sa = scheduleMap[a.name] || "";
+        const sb = scheduleMap[b.name] || "";
+        if (sa !== sb) return sa.localeCompare(sb);
+        const ta = TEAM_ORDER.indexOf(a.team), tb = TEAM_ORDER.indexOf(b.team);
+        if (ta !== tb) return (ta === -1 ? 999 : ta) - (tb === -1 ? 999 : tb);
+        return a.name.localeCompare(b.name, 'zh');
+    });
+
+    // 表头
+    document.getElementById("assignTableHead").innerHTML = `
+        <tr>
+            <th class="col-shift">班次</th>
+            <th class="col-team">团队</th>
+            <th class="col-name">客服</th>
+            ${WORK_TYPES.map(w => `<th class="col-work">${w}</th>`).join('')}
+            <th class="col-meal">午餐</th>
+            <th class="col-meal">晚餐</th>
+        </tr>`;
+
+    // 汇总行
+    const workCounts = {};
+    WORK_TYPES.forEach(w => { workCounts[w] = 0; });
+    working.forEach(e => {
+        const assign = assignMap[e.name];
+        if (assign && assign.work_types) {
+            assign.work_types.forEach(w => {
+                if (workCounts.hasOwnProperty(w)) workCounts[w]++;
+            });
+        }
+    });
+
+    // 数据行
+    document.getElementById("assignTableBody").innerHTML = `
+        <tr class="summary-row">
+            <td class="col-shift"></td>
+            <td class="col-team"></td>
+            <td class="col-name">${working.length}人</td>
+            ${WORK_TYPES.map(w => `<td class="col-work">${workCounts[w] || ''}</td>`).join('')}
+            <td class="col-meal"></td>
+            <td class="col-meal"></td>
+        </tr>
+        ${working.map(e => {
+            const assign = assignMap[e.name] || { work_types: [], lunch_slot: '', dinner_slot: '' };
+            const myWorks = new Set(assign.work_types || []);
+            const shift = scheduleMap[e.name] || "";
+            return `
+                <tr>
+                    <td class="col-shift emp-shift-cell ${getShiftClass(shift)}" style="font-weight:600;">${shift}</td>
+                    <td class="col-team" style="font-size:0.8rem;color:#475569;font-weight:600;">${e.team}</td>
+                    <td class="col-name emp-name-cell">${e.name}${e.position==='主管'?' 👑':''}</td>
+                    ${WORK_TYPES.map(w => {
+                        const assigned = myWorks.has(w);
+                        return `<td class="col-work ${assigned ? 'assigned' : 'unassigned'}">${assigned ? '1' : ''}</td>`;
+                    }).join('')}
+                    <td class="col-meal meal-cell">${assign.lunch_slot || ''}</td>
+                    <td class="col-meal meal-cell">${assign.dinner_slot || ''}</td>
+                </tr>`;
+        }).join('')}
+    `;
+}
+
+async function init() {
+    try {
+        const today = todayStr();
+        const yesterday = yesterdayStr();
+        document.getElementById("headerDate").textContent = today;
+        const weekNames = ["日","一","二","三","四","五","六"];
+        const weekday = "星期" + weekNames[new Date().getDay()];
+        document.getElementById("dateTitle").textContent = `【${today} ${weekday}】今日排班`;
+
+        const [employees, todaySchedules, yesterdaySchedules, shifts, assignments] = await Promise.all([
+            apiGet('/employees?status=active'),
+            apiGet('/schedules?start=' + today + '&end=' + today),
+            apiGet('/schedules?start=' + yesterday + '&end=' + yesterday),
+            apiGet('/shifts'),
+            apiGet('/assignments?date=' + today)
+        ]);
+        shiftDataMap = {};
+        shifts.forEach(s => { shiftDataMap[s.name] = s; });
+
+        const scheduleMap = {};
+        todaySchedules.forEach(s => { scheduleMap[s.employee_name] = s.shift_name; });
+        const yestScheduleMap = {};
+        yesterdaySchedules.forEach(s => { yestScheduleMap[s.employee_name] = s.shift_name; });
+
+        // 主管 vs 客服
+        const supervisors = employees.filter(e => e.position === '主管');
+        const agents = employees.filter(e => e.position !== '主管');
+
+        // 值班主管：今天排班不是休息/请假/放休
+        const dutySupervisors = supervisors.filter(s => {
+            const shift = scheduleMap[s.name];
+            return shift && !LEAVE_SHIFTS.has(shift);
+        });
+
+        // 客服统计
+        let agentWork = 0, agentLeave = 0;
+        agents.forEach(a => {
+            const shift = scheduleMap[a.name];
+            if (!shift || LEAVE_SHIFTS.has(shift)) agentLeave++;
+            else agentWork++;
+        });
+
+        // 昨日上班人数（用于环比）
+        const yestWork = countWorking(yestScheduleMap, agents);
+        const diff = agentWork - yestWork;
+        let deltaHTML = '';
+        if (diff > 0) {
+            deltaHTML = `<span class="stat-delta up">▲${diff}</span>`;
+        } else if (diff < 0) {
+            deltaHTML = `<span class="stat-delta down">▼${Math.abs(diff)}</span>`;
+        }
+
+        const restPctHTML = `<span class="stat-delta" style="color:#94a3b8;">${agents.length ? Math.round(agentLeave/agents.length*100) : 0}%</span>`;
+
+        // 渲染指标卡片
+        const supList = dutySupervisors.map(s =>
+            `<span style="font-weight:600;font-size:1.05em;">${s.name}</span> <span style="font-size:0.85rem;color:#64748b;">${scheduleMap[s.name]}</span>`
+        ).join('、') || '<span style="color:#94a3b8;">今日无主管值班</span>';
+
+        document.getElementById("statCards").innerHTML = `
+            <div class="stat-card sup">
+                <div class="stat-icon">👑</div>
+                <div class="stat-value" style="font-size:1.3rem;">${supList}</div>
+                <div class="stat-label">值班主管</div>
+            </div>
+            <div class="stat-card total">
+                <div class="stat-icon">🎧</div>
+                <div class="stat-value">${agents.length}</div>
+                <div class="stat-label">在职客服</div>
+            </div>
+            <div class="stat-card work">
+                <div class="stat-icon">💼</div>
+                <div class="stat-value">${agentWork}${deltaHTML}</div>
+                <div class="stat-label">今日上班</div>
+            </div>
+            <div class="stat-card rest">
+                <div class="stat-icon">😴</div>
+                <div class="stat-value">${agentLeave}${restPctHTML}</div>
+                <div class="stat-label">今日休息</div>
+            </div>
+        `;
+
+        // 渲染团队卡片（固定顺序）
+        const TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
+        const teams = TEAM_ORDER.filter(t => agents.some(a => a.team === t));
+        const shiftColors = {"A班":"A班","B班":"B班","C班":"C班","T班":"T班","E班":"E班","F班":"F班"};
+
+        document.getElementById("teamGrid").innerHTML = teams.map(team => {
+            const members = agents.filter(a => a.team === team);
+            // 按班次分组
+            const byShift = {};
+            const noSchedule = [];
+            members.forEach(m => {
+                const shift = scheduleMap[m.name];
+                if (!shift || LEAVE_SHIFTS.has(shift)) {
+                    noSchedule.push(m.name);
+                } else {
+                    if (!byShift[shift]) byShift[shift] = [];
+                    byShift[shift].push(m.name);
+                }
+            });
+            const workingCount = members.length - noSchedule.length;
+
+            const shiftNames = Object.keys(byShift).sort();
+            const bodyHTML = shiftNames.length === 0
+                ? `<div class="team-card-empty">今日无人上班</div>`
+                : shiftNames.map(shift => `
+                    <div class="shift-group">
+                        <span class="shift-badge ${shiftColors[shift] || ''}">${shift}</span>
+                        <span class="shift-names">${byShift[shift].join('、')}</span>
+                    </div>
+                `).join('');
+
+            return `
+                <div class="team-card">
+                    <div class="team-card-header">
+                        <span class="team-card-name">${team}</span>
+                        <span class="team-card-count"><strong>${workingCount}</strong>/${members.length} 人上班</span>
+                    </div>
+                    ${bodyHTML}
+                </div>
+            `;
+        }).join('');
+
+        // 渲染工作安排汇总
+        renderAssignments(scheduleMap, agents, assignments);
+
+    } catch(e) {
+        showToast('数据加载失败: ' + e.message);
+    }
+
+    // 班次标签 hover tooltip
+    const tooltip = document.getElementById("shiftTooltip");
+    document.getElementById("teamGrid").addEventListener("mouseover", (e) => {
+        const badge = e.target.closest(".shift-badge");
+        if (!badge) return;
+        const name = badge.textContent.trim();
+        const info = shiftDataMap[name];
+        if (!info || !info.start_time || !info.end_time) return;
+        tooltip.innerHTML = `【${name}】${info.start_time}-${info.end_time}`;
+        tooltip.style.display = "block";
+    });
+    document.getElementById("teamGrid").addEventListener("mousemove", (e) => {
+        if (tooltip.style.display === "block") {
+            tooltip.style.left = (e.clientX + 14) + "px";
+            tooltip.style.top = (e.clientY - 38) + "px";
+        }
+    });
+    document.getElementById("teamGrid").addEventListener("mouseout", (e) => {
+        if (e.target.closest(".shift-badge")) tooltip.style.display = "none";
+    });
+
+    // 侧边栏导航
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const page = item.getAttribute('data-page');
+            const pageMap = {
+                overview: '总览.html',
+                schedule: '排班表.html',
+                employees: '员工管理.html',
+                shifts: '班次设置.html',
+                work: '工作安排.html'
+            };
+            if (pageMap[page]) {
+                window.location.href = pageMap[page];
+            } else {
+                e.preventDefault();
+                showToast('该页面尚未开通，敬请期待');
+            }
+        });
+    });
+}
+init();
+</script>
+</body>
+</html>

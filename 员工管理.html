@@ -88,6 +88,22 @@
         .btn-danger:hover { background: #dc2626; }
         .btn-sm { padding: 5px 12px; font-size: 0.85rem; }
 
+        /* 开关 */
+        .toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background: #cbd5e1; border-radius: 22px; transition: 0.2s;
+        }
+        .toggle-slider::before {
+            content: ""; position: absolute; height: 16px; width: 16px;
+            left: 3px; bottom: 3px; background: white;
+            border-radius: 50%; transition: 0.2s;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: #10b981; }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
+        .toggle-label { font-size: 0.85rem; color: #475569; vertical-align: middle; margin-left: 6px; }
+
         /* 表格 */
         .table-wrapper {
             overflow-x: auto; border-radius: 16px; background: white;
@@ -168,7 +184,9 @@
 <aside class="sidebar">
     <div class="sidebar-logo">客服排班系统</div>
     <nav class="sidebar-nav">
+        <a class="nav-item" data-page="overview" href="总览.html">总览</a>
         <a class="nav-item" data-page="schedule" href="排班表.html">排班表</a>
+        <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
         <a class="nav-item active" data-page="employees">员工管理</a>
         <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
         <a class="nav-item" data-page="stats">排班统计</a>
@@ -205,6 +223,7 @@
         <!-- 操作栏 -->
         <div class="action-bar">
             <button class="btn btn-primary" id="addEmployeeBtn">新增员工</button>
+            <button class="btn" id="importEmployeeBtn">批量导入</button>
         </div>
         <!-- 数据表格 -->
         <div class="table-wrapper">
@@ -212,11 +231,13 @@
                 <thead>
                     <tr>
                         <th>员工号</th>
+                        <th>东福工号</th>
                         <th>姓名</th>
                         <th>团队</th>
                         <th>岗位</th>
                         <th>上级</th>
-                        <th>入职时间</th>
+                        <th>入职日期</th>
+                        <th style="text-align:center;">状态</th>
                         <th style="text-align:center; min-width:120px;">操作</th>
                     </tr>
                 </thead>
@@ -238,14 +259,20 @@
             <input type="text" id="modalName" placeholder="请输入员工姓名">
         </div>
         <div class="modal-row">
+            <label>东福工号 <span style="font-weight:400;color:#94a3b8;">（选填）</span></label>
+            <input type="text" id="modalDongfuId" placeholder="请输入东福工号">
+        </div>
+        <div class="modal-row">
             <label class="required">所属团队</label>
             <select id="modalTeam">
                 <option value="">请选择团队</option>
                 <option value="在线组">在线组</option>
                 <option value="热线组">热线组</option>
                 <option value="售后组">售后组</option>
-                <option value="主管">主管</option>
                 <option value="综合组">综合组</option>
+                <option value="VIP组">VIP组</option>
+                <option value="质检组">质检组</option>
+                <option value="支持组">支持组</option>
             </select>
         </div>
         <div class="modal-row">
@@ -254,6 +281,7 @@
                 <option value="">请选择岗位</option>
                 <option value="客服">客服</option>
                 <option value="主管">主管</option>
+                <option value="其他">其他</option>
             </select>
         </div>
         <div class="modal-row">
@@ -263,8 +291,16 @@
             </select>
         </div>
         <div class="modal-row">
-            <label class="required">入职时间</label>
+            <label>入职日期 <span style="font-weight:400;color:#94a3b8;">（选填）</span></label>
             <input type="date" id="modalEntryDate">
+        </div>
+        <div class="modal-row" style="flex-direction:row; align-items:center; gap:12px;">
+            <label style="margin:0;">状态</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="modalStatus" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="font-size:0.85rem; color:#64748b;" id="modalStatusLabel">正常</span>
         </div>
         <div class="modal-actions">
             <button class="btn btn-outline" id="modalCancelBtn">取消</button>
@@ -286,13 +322,30 @@
     </div>
 </div>
 
+<!-- 批量导入弹窗 -->
+<div class="modal-overlay" id="importModal">
+    <div class="modal-dialog" style="text-align:center;">
+        <div class="modal-title" style="text-align:left;">批量导入员工</div>
+        <p style="font-size:0.92rem; color:#64748b; margin-bottom:20px;">仅支持 <strong>.xlsx</strong> 格式上传</p>
+        <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:20px;">
+            必填列：<strong>姓名、团队、岗位</strong>；选填列：<strong>东福工号、上级、入职日期</strong>
+        </p>
+        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+            <button class="btn btn-outline" id="downloadEmpTemplateBtn">下载模板</button>
+            <button class="btn btn-primary" id="selectEmpFileBtn">选择文件上传</button>
+        </div>
+    </div>
+</div>
+
+<input type="file" id="uploadEmpExcelInput" accept=".xlsx" style="display:none;">
+
 <div id="toastMsg" class="toast-msg" style="display: none;"></div>
 
 <script>
     // ========== 数据层（后端 API） ==========
     const API_BASE = '/api';
-    const teamOptions = ["在线组", "热线组", "售后组", "主管", "综合组"];
-    const positionOptions = ["客服", "主管"];
+    const teamOptions = ["在线组", "热线组", "售后组", "综合组", "VIP组", "质检组", "支持组"];
+    const positionOptions = ["客服", "主管", "其他"];
 
     async function apiGet(url) {
         const res = await fetch(API_BASE + url);
@@ -355,18 +408,25 @@
         document.getElementById("tableInfo").textContent = `共 ${filtered.length} 名员工`;
 
         if(filtered.length === 0) {
-            tbody.innerHTML = `<tr class="empty-row"><td colspan="7">暂无匹配的员工数据</td></tr>`;
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="9">暂无匹配的员工数据</td></tr>`;
             return;
         }
 
         tbody.innerHTML = filtered.map(e => `
             <tr>
                 <td style="font-weight:500; color:#6366f1;">${e.id}</td>
+                <td>${e.dongfu_id || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td style="font-weight:600;">${e.name}</td>
                 <td><span class="team-badge">${e.team}</span></td>
                 <td><span class="pos-badge ${e.position==='客服'?'agent':'manager'}">${e.position}</span></td>
                 <td>${e.supervisor || '<span style="color:#94a3b8;">-</span>'}</td>
-                <td>${e.entryDate}</td>
+                <td>${e.entry_date || '<span style="color:#94a3b8;">-</span>'}</td>
+                <td style="text-align:center;">
+                    <label class="toggle-switch">
+                        <input type="checkbox" ${e.status!=='inactive'?'checked':''} onchange="toggleStatus('${e.id}', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </td>
                 <td class="actions-cell" style="justify-content:center;">
                     <button class="btn btn-sm btn-outline edit-btn" data-id="${e.id}">编辑</button>
                     <button class="btn btn-sm btn-danger delete-btn" data-id="${e.id}">删除</button>
@@ -394,9 +454,12 @@
         editingEmpId = null;
         document.getElementById("modalTitle").textContent = "新增员工";
         document.getElementById("modalName").value = '';
+        document.getElementById("modalDongfuId").value = '';
         document.getElementById("modalTeam").value = '';
         document.getElementById("modalPosition").value = '';
         document.getElementById("modalEntryDate").value = '';
+        document.getElementById("modalStatus").checked = true;
+        document.getElementById("modalStatusLabel").textContent = '正常';
         renderSupervisorOptions(null);
         document.getElementById("employeeModal").classList.add("active");
     }
@@ -407,9 +470,12 @@
         editingEmpId = empId;
         document.getElementById("modalTitle").textContent = "编辑员工";
         document.getElementById("modalName").value = emp.name;
+        document.getElementById("modalDongfuId").value = emp.dongfu_id || '';
         document.getElementById("modalTeam").value = emp.team;
         document.getElementById("modalPosition").value = emp.position;
-        document.getElementById("modalEntryDate").value = emp.entryDate;
+        document.getElementById("modalEntryDate").value = emp.entry_date || '';
+        document.getElementById("modalStatus").checked = emp.status !== 'inactive';
+        document.getElementById("modalStatusLabel").textContent = emp.status === 'inactive' ? '失效' : '正常';
         renderSupervisorOptions(emp.name);
         document.getElementById("modalSupervisor").value = emp.supervisor || '';
         document.getElementById("employeeModal").classList.add("active");
@@ -421,22 +487,22 @@
 
     async function saveEmployee() {
         const name = document.getElementById("modalName").value.trim();
+        const dongfuId = document.getElementById("modalDongfuId").value.trim();
         const team = document.getElementById("modalTeam").value;
         const position = document.getElementById("modalPosition").value;
         const supervisor = document.getElementById("modalSupervisor").value;
         const entryDate = document.getElementById("modalEntryDate").value;
+        const status = document.getElementById("modalStatus").checked ? 'active' : 'inactive';
 
         if(!name) { showToast("请输入员工姓名"); return; }
         if(!team) { showToast("请选择所属团队"); return; }
         if(!position) { showToast("请选择岗位"); return; }
-        if(!entryDate) { showToast("请选择入职时间"); return; }
-
         try {
             if(editingEmpId) {
-                await apiPut('/employees/' + editingEmpId, { name, team, position, supervisor, entryDate });
+                await apiPut('/employees/' + editingEmpId, { name, dongfuId, team, position, supervisor, entryDate, status });
                 showToast("员工信息已更新");
             } else {
-                await apiPost('/employees', { name, team, position, supervisor, entryDate });
+                await apiPost('/employees', { name, dongfuId, team, position, supervisor, entryDate, status });
                 showToast("员工已创建");
             }
             closeEmployeeModal();
@@ -491,6 +557,18 @@
         setTimeout(() => { toast.style.display = "none"; }, 2500);
     }
 
+    async function toggleStatus(empId, checked) {
+        const status = checked ? 'active' : 'inactive';
+        try {
+            await apiPut('/employees/' + empId, { status });
+            const emp = employees.find(e => e.id === empId);
+            if (emp) emp.status = status;
+        } catch(e) {
+            showToast(e.message);
+            renderTable();
+        }
+    }
+
     // ========== 初始化 ==========
     async function init() {
         await loadEmployees();
@@ -516,6 +594,9 @@
 
         document.getElementById("modalCancelBtn").addEventListener("click", closeEmployeeModal);
         document.getElementById("modalSaveBtn").addEventListener("click", saveEmployee);
+        document.getElementById("modalStatus").addEventListener("change", function() {
+            document.getElementById("modalStatusLabel").textContent = this.checked ? '正常' : '失效';
+        });
         document.getElementById("employeeModal").addEventListener("click", (e) => {
             if(e.target === document.getElementById("employeeModal")) closeEmployeeModal();
         });
@@ -526,16 +607,69 @@
             if(e.target === document.getElementById("deleteModal")) closeDeleteModal();
         });
 
+        // 批量导入
+        document.getElementById("importEmployeeBtn").addEventListener("click", () => {
+            document.getElementById("importModal").classList.add("active");
+        });
+
+        document.getElementById("downloadEmpTemplateBtn").addEventListener("click", () => {
+            window.open('/api/employees/template', '_blank');
+        });
+
+        document.getElementById("selectEmpFileBtn").addEventListener("click", () => {
+            document.getElementById("uploadEmpExcelInput").click();
+        });
+
+        document.getElementById("uploadEmpExcelInput").addEventListener("change", async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append("file", file);
+            try {
+                const res = await fetch('/api/employees/import', { method: 'POST', body: formData });
+                const result = await res.json();
+                if (!res.ok) { showToast(result.error || '导入失败'); return; }
+                let msg = `成功导入 ${result.success} 名员工`;
+                if (result.errors && result.errors.length > 0) {
+                    msg += `，${result.errors.length} 条失败`;
+                    if (result.errors.length <= 5) {
+                        msg += '：' + result.errors.join('；');
+                    }
+                }
+                showToast(msg);
+                document.getElementById("importModal").classList.remove("active");
+                await loadEmployees();
+                refreshAll();
+            } catch (err) {
+                showToast('导入失败: ' + err.message);
+            }
+            e.target.value = '';
+        });
+
+        document.getElementById("importModal").addEventListener("click", (e) => {
+            if (e.target === document.getElementById("importModal")) {
+                document.getElementById("importModal").classList.remove("active");
+            }
+        });
+
         document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 const page = item.getAttribute('data-page');
                 if(page === 'employees') return;
+                if(page === 'overview') {
+                    window.location.href = '总览.html';
+                    return;
+                }
                 if(page === 'schedule') {
                     window.location.href = '排班表.html';
                     return;
                 }
                 if(page === 'shifts') {
                     window.location.href = '班次设置.html';
+                    return;
+                }
+                if(page === 'work') {
+                    window.location.href = '工作安排.html';
                     return;
                 }
                 e.preventDefault();

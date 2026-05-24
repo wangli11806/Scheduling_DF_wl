@@ -1,0 +1,32 @@
+SHF007: SHF007 = [休假] (2 chars, hex: e4bc91e58187)
+SHF001 = [A班] (hex: 41e78fad)
+SHF002 = [B班] (hex: 42e78fad)
+SHF003 = [C班] (hex: 43e78fad)
+SHF004 = [T班] (hex: 54e78fad)
+SHF005 = [E班] (hex: 45e78fad)
+SHF006 = [F班] (hex: 46e78fad)
+SHF007 = [休假] (hex: e4bc91e58187)
+SHF008 = [放休] (hex: e694bee4bc91)
+SHF009 = [请假] (hex: e8afb7e58187)
+Used in schedules:
+  [休假] (hex: e4bc91e58187)
+  [A班] (hex: 41e78fad)
+  [B班] (hex: 42e78fad)
+  [请假] (hex: e8afb7e58187)
+  [E班] (hex: 45e78fad)
+  [T班] (hex: 54e78fad)
+  [F班] (hex: 46e78fad)
+  [休息] (hex: e4bc91e681af)
+  [C班] (hex: 43e78fad)
+  [放休] (hex: e694bee4bc91)
+May 2026 counts:
+  [A班] = 104
+  [B班] = 585
+  [C班] = 1
+  [E班] = 36
+  [F班] = 1
+  [T班] = 36
+  [休假] = 3
+  [休息] = 2
+  [放休] = 2
+  [请假] = 38

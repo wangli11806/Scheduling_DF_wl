@@ -7,7 +7,7 @@ Flask + SQLite，单文件部署
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(sys.executable), 'Lib', 'site-packages'))
 
-import sqlite3
+import sqlite3, json
 from datetime import datetime, date
 from flask import Flask, request, jsonify, g, send_file
 from openpyxl import Workbook
@@ -42,7 +42,9 @@ def init_db():
             team        TEXT NOT NULL,
             position    TEXT NOT NULL DEFAULT '客服',
             supervisor  TEXT DEFAULT '',
+            dongfu_id   TEXT DEFAULT '',
             entry_date  TEXT NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'active',
             created_at  TEXT DEFAULT (datetime('now','localtime')),
             updated_at  TEXT DEFAULT (datetime('now','localtime'))
         );
@@ -70,8 +72,28 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_schedules_date ON schedules(schedule_date);
         CREATE INDEX IF NOT EXISTS idx_schedules_emp  ON schedules(employee_name);
+
+        CREATE TABLE IF NOT EXISTS daily_assignments (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            date           TEXT NOT NULL,
+            employee_name  TEXT NOT NULL,
+            work_types     TEXT NOT NULL DEFAULT '[]',
+            lunch_slot     TEXT DEFAULT '',
+            dinner_slot    TEXT DEFAULT '',
+            created_at     TEXT DEFAULT (datetime('now','localtime')),
+            updated_at     TEXT DEFAULT (datetime('now','localtime')),
+            UNIQUE(date, employee_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_assignments_date ON daily_assignments(date);
     """)
     db.commit()
+
+    # 迁移：为已有数据库添加 dongfu_id 列
+    try:
+        db.execute("ALTER TABLE employees ADD COLUMN dongfu_id TEXT DEFAULT ''")
+        db.commit()
+    except sqlite3.OperationalError:
+        pass
 
     # 写入默认数据
     cur = db.execute("SELECT COUNT(*) FROM employees")
@@ -103,7 +125,11 @@ def init_db():
 @app.route("/api/employees", methods=["GET"])
 def api_employees_list():
     db = get_db()
-    rows = db.execute("SELECT * FROM employees ORDER BY id").fetchall()
+    status = request.args.get("status", "").strip()
+    if status in ("active", "inactive"):
+        rows = db.execute("SELECT * FROM employees WHERE status=? ORDER BY id", (status,)).fetchall()
+    else:
+        rows = db.execute("SELECT * FROM employees ORDER BY id").fetchall()
     return jsonify([dict(r) for r in rows])
 
 
@@ -115,6 +141,8 @@ def api_employees_create():
     position = (data.get("position") or "").strip()
     supervisor = (data.get("supervisor") or "").strip()
     entry_date = (data.get("entryDate") or "").strip()
+    dongfu_id = (data.get("dongfuId") or "").strip()
+    status = (data.get("status") or "active").strip()
 
     if not name:
         return jsonify({"error": "请输入员工姓名"}), 400
@@ -122,22 +150,19 @@ def api_employees_create():
         return jsonify({"error": "请选择所属团队"}), 400
     if not position:
         return jsonify({"error": "请选择岗位"}), 400
-    if not entry_date:
-        return jsonify({"error": "请选择入职时间"}), 400
 
     db = get_db()
     exist = db.execute("SELECT id FROM employees WHERE name=?", (name,)).fetchone()
     if exist:
         return jsonify({"error": f"员工\"{name}\"已存在"}), 400
 
-    # ID 自增
     row = db.execute("SELECT MAX(CAST(SUBSTR(id,4) AS INTEGER)) FROM employees").fetchone()
     next_id = (row[0] or 0) + 1
     emp_id = f"EMP{next_id:03d}"
 
     db.execute(
-        "INSERT INTO employees(id, name, team, position, supervisor, entry_date) VALUES(?,?,?,?,?,?)",
-        (emp_id, name, team, position, supervisor, entry_date)
+        "INSERT INTO employees(id, name, team, position, supervisor, entry_date, dongfu_id, status) VALUES(?,?,?,?,?,?,?,?)",
+        (emp_id, name, team, position, supervisor, entry_date, dongfu_id, status)
     )
     db.commit()
     row = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
@@ -152,11 +177,16 @@ def api_employees_update(emp_id):
     if not emp:
         return jsonify({"error": "员工不存在"}), 404
 
-    name = (data.get("name") or "").strip()
-    team = (data.get("team") or "").strip()
-    position = (data.get("position") or "").strip()
-    supervisor = (data.get("supervisor") or "").strip()
-    entry_date = (data.get("entryDate") or "").strip()
+    name = (data.get("name") or "").strip() or emp["name"]
+    team = (data.get("team") or "").strip() or emp["team"]
+    position = (data.get("position") or "").strip() or emp["position"]
+    supervisor = data.get("supervisor") if "supervisor" in data else emp["supervisor"]
+    if supervisor: supervisor = supervisor.strip()
+    entry_date = data.get("entryDate") if "entryDate" in data else emp["entry_date"]
+    if entry_date: entry_date = entry_date.strip()
+    dongfu_id = data.get("dongfuId") if "dongfuId" in data else emp["dongfu_id"]
+    if dongfu_id: dongfu_id = dongfu_id.strip()
+    status = (data.get("status") or "").strip() or emp.get("status", "active")
 
     if not name:
         return jsonify({"error": "请输入员工姓名"}), 400
@@ -167,8 +197,8 @@ def api_employees_update(emp_id):
 
     old_name = emp["name"]
     db.execute(
-        "UPDATE employees SET name=?, team=?, position=?, supervisor=?, entry_date=?, updated_at=datetime('now','localtime') WHERE id=?",
-        (name, team, position, supervisor, entry_date, emp_id)
+        "UPDATE employees SET name=?, team=?, position=?, supervisor=?, entry_date=?, dongfu_id=?, status=?, updated_at=datetime('now','localtime') WHERE id=?",
+        (name, team, position, supervisor or "", entry_date or "", dongfu_id or "", status, emp_id)
     )
     # 如果改了名字，同步更新上下级引用和排班记录
     if old_name != name:
@@ -177,6 +207,120 @@ def api_employees_update(emp_id):
     db.commit()
     row = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     return jsonify(dict(row))
+
+
+@app.route("/api/employees/import", methods=["POST"])
+def api_employees_import():
+    """Excel 批量导入员工"""
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "请上传文件"}), 400
+
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(file, read_only=True)
+    except Exception:
+        return jsonify({"error": "无法解析该文件，请上传 .xlsx 格式的 Excel（不支持旧版 .xls 格式）"}), 400
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) < 2:
+        return jsonify({"error": "Excel至少包含两行数据（表头+数据）"}), 400
+
+    header = [str(c or "").strip() for c in rows[0]]
+    name_idx = next((i for i, h in enumerate(header) if "姓名" in h), -1)
+    team_idx = next((i for i, h in enumerate(header) if "团队" in h), -1)
+    pos_idx = next((i for i, h in enumerate(header) if "岗位" in h), -1)
+    sup_idx = next((i for i, h in enumerate(header) if "上级" in h), -1)
+    date_idx = next((i for i, h in enumerate(header) if "入职" in h or "日期" in h), -1)
+    dongfu_idx = next((i for i, h in enumerate(header) if "东福" in h or "工号" in h), -1)
+    status_idx = next((i for i, h in enumerate(header) if "状态" in h), -1)
+
+    db = get_db()
+    success = 0
+    errors = []
+    for rn, row in enumerate(rows[1:], start=2):
+        if not row:
+            continue
+        try:
+            name = str(row[name_idx] or "").strip()
+            team = str(row[team_idx] or "").strip()
+            position = str(row[pos_idx] or "").strip()
+        except IndexError:
+            continue
+        if not name or not team or not position:
+            if name:
+                errors.append(f"第{rn}行: 信息不完整")
+            continue
+
+        supervisor = ""
+        entry_date = ""
+        dongfu_id = ""
+        status = "active"
+        if sup_idx >= 0:
+            try:
+                supervisor = str(row[sup_idx] or "").strip()
+            except IndexError:
+                pass
+        if date_idx >= 0:
+            try:
+                raw_date = str(row[date_idx] or "").strip()
+                entry_date = _parse_date(raw_date) or raw_date
+            except IndexError:
+                pass
+        if dongfu_idx >= 0:
+            try:
+                dongfu_id = str(row[dongfu_idx] or "").strip()
+            except IndexError:
+                pass
+        if status_idx >= 0:
+            try:
+                raw_status = str(row[status_idx] or "").strip()
+                if raw_status in ("失效", "inactive", "0", "false", "否"):
+                    status = "inactive"
+            except IndexError:
+                pass
+
+        exist = db.execute("SELECT id FROM employees WHERE name=?", (name,)).fetchone()
+        if exist:
+            errors.append(f"第{rn}行: 员工\"{name}\"已存在，跳过")
+            continue
+
+        num_row = db.execute("SELECT MAX(CAST(SUBSTR(id,4) AS INTEGER)) FROM employees").fetchone()
+        next_id = (num_row[0] or 0) + 1
+        emp_id = f"EMP{next_id:03d}"
+
+        db.execute(
+            "INSERT INTO employees(id, name, team, position, supervisor, entry_date, dongfu_id, status) VALUES(?,?,?,?,?,?,?,?)",
+            (emp_id, name, team, position, supervisor, entry_date, dongfu_id, status)
+        )
+        success += 1
+
+    db.commit()
+    wb.close()
+    return jsonify({"ok": True, "success": success, "errors": errors})
+
+
+@app.route("/api/employees/template", methods=["GET"])
+def api_employees_template():
+    """下载员工导入模板"""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "员工导入模板"
+    ws.append(["姓名", "东福工号", "团队", "岗位", "上级", "入职日期", "状态"])
+    ws.column_dimensions["A"].width = 12
+    ws.column_dimensions["B"].width = 14
+    ws.column_dimensions["C"].width = 12
+    ws.column_dimensions["D"].width = 10
+    ws.column_dimensions["E"].width = 12
+    ws.column_dimensions["F"].width = 14
+    ws.column_dimensions["G"].width = 10
+
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    wb.save(tmp.name)
+    tmp.close()
+    return send_file(tmp.name, as_attachment=True, download_name="员工导入模板.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.route("/api/employees/<emp_id>", methods=["DELETE"])
@@ -342,7 +486,10 @@ def api_schedules_import():
         return jsonify({"error": "请上传文件"}), 400
 
     from openpyxl import load_workbook
-    wb = load_workbook(file, read_only=True)
+    try:
+        wb = load_workbook(file, read_only=True)
+    except Exception:
+        return jsonify({"error": "无法解析该文件，请上传 .xlsx 格式的 Excel（不支持旧版 .xls 格式）"}), 400
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     if len(rows) < 2:
@@ -358,20 +505,25 @@ def api_schedules_import():
 
     db = get_db()
     count = 0
-    for row in rows[1:]:
+    failures = []
+    for rn, row in enumerate(rows[1:], start=2):
         if not row:
             continue
         try:
-            d = str(row[date_idx]).strip()
-            emp = str(row[emp_idx]).strip()
-            shift = str(row[shift_idx]).strip()
+            d = str(row[date_idx] or "").strip()
+            emp = str(row[emp_idx] or "").strip()
+            shift = str(row[shift_idx] or "").strip()
         except IndexError:
             continue
-        if not d or not emp or not shift:
+        if not d or not emp:
+            if emp or d:
+                failures.append({"row": rn, "employee": emp or "(空)", "date": d or "(空)", "reason": "信息不完整"})
             continue
-        # 尝试解析日期
+        if not shift:
+            shift = "休息"
         date_str = _parse_date(d)
         if not date_str:
+            failures.append({"row": rn, "employee": emp, "date": d, "reason": "日期格式无法识别"})
             continue
         db.execute(
             "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
@@ -380,7 +532,118 @@ def api_schedules_import():
         count += 1
     db.commit()
     wb.close()
-    return jsonify({"ok": True, "updated": count})
+    return jsonify({"ok": True, "updated": count, "failures": failures})
+
+
+@app.route("/api/schedules/import-matrix", methods=["POST"])
+def api_schedules_import_matrix():
+    """Excel 矩阵格式导入排班
+    格式：第一列为员工姓名，第一行为日期（从第二列开始），交叉单元格为班次代码
+    A=A班, B=B班, C=C班, D=D班, E=E班, 假=请假, 空=休息
+    """
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "请上传文件"}), 400
+
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(file, read_only=True)
+    except Exception:
+        return jsonify({"error": "无法解析该文件，请上传 .xlsx 格式的 Excel（不支持旧版 .xls 格式）"}), 400
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) < 2:
+        return jsonify({"error": "Excel至少包含表头和数据行"}), 400
+
+    # 解析表头：第一列是"姓名"，其余列是日期
+    header = [str(c or "").strip() for c in rows[0]]
+    dates = []
+    for i in range(1, len(header)):
+        d = _parse_date(header[i])
+        if d:
+            dates.append((i, d))
+
+    if not dates:
+        return jsonify({"error": "未识别到日期列，表头请使用日期格式（如2026-02-01或2/1）"}), 400
+
+    # 加载班次表，构建名称→名称的映射
+    db = get_db()
+    db_shifts = db.execute("SELECT name FROM shifts").fetchall()
+    db_shift_names = [s["name"] for s in db_shifts]
+
+    # 代码→班次名称 精确映射（优先）
+    code_to_shift = {
+        "A": "A班", "a": "A班",
+        "B": "B班", "b": "B班",
+        "C": "C班", "c": "C班",
+        "T": "T班", "t": "T班",
+        "E": "E班", "e": "E班",
+        "F": "F班", "f": "F班",
+        "休": "休息", "休假": "休息", "休息": "休息", "调休": "放休", "放休": "放休",
+        "假": "请假", "请假": "请假",
+    }
+
+    def resolve_shift(raw_val):
+        """将单元格值解析为班次名称。返回 (shift_name, None) 成功，或 (None, reason) 失败"""
+        val = raw_val.strip()
+        if not val:
+            return "休息", None
+
+        # 1. 精确映射
+        if val in code_to_shift:
+            target = code_to_shift[val]
+            if target in db_shift_names:
+                return target, None
+            else:
+                return None, f"映射目标班次\"{target}\"在班次表中不存在"
+
+        # 2. 直接匹配班次名称
+        if val in db_shift_names:
+            return val, None
+
+        # 3. 模糊匹配（双向子串）
+        for sn in db_shift_names:
+            if val in sn or sn in val:
+                return sn, None
+
+        return None, f"班次\"{val}\"无法识别"
+
+    count = 0
+    failures = []
+    for rn, row in enumerate(rows[1:], start=2):
+        if not row:
+            continue
+        emp_name = str(row[0] or "").strip()
+        if not emp_name:
+            continue
+
+        emp = db.execute("SELECT name FROM employees WHERE name=?", (emp_name,)).fetchone()
+        if not emp:
+            failures.append({"row": rn, "employee": emp_name, "date": "", "reason": "员工不存在"})
+            continue
+
+        for col_idx, date_str in dates:
+            try:
+                raw = str(row[col_idx] or "")
+            except IndexError:
+                raw = ""
+            if not raw.strip():
+                raw = ""  # 空值统一处理为休息
+
+            shift, err = resolve_shift(raw)
+            if err:
+                failures.append({"row": rn, "employee": emp_name, "date": date_str, "reason": err})
+                continue
+
+            db.execute(
+                "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
+                (date_str, emp_name, shift)
+            )
+            count += 1
+
+    db.commit()
+    wb.close()
+    return jsonify({"ok": True, "updated": count, "failures": failures})
 
 
 @app.route("/api/schedules/export", methods=["GET"])
@@ -446,6 +709,57 @@ def api_schedules_export():
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+# ==================== 工作安排 API ====================
+
+@app.route("/api/assignments", methods=["GET"])
+def api_assignments_list():
+    """查询某日工作安排"""
+    date_str = request.args.get("date", "").strip()
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM daily_assignments WHERE date=? ORDER BY employee_name",
+        (date_str,)
+    ).fetchall()
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["work_types"] = json.loads(d["work_types"])
+        results.append(d)
+    return jsonify(results)
+
+
+@app.route("/api/assignments", methods=["POST"])
+def api_assignments_save():
+    """批量保存工作安排: {date, assignments: [{employee_name, work_types, lunch_slot, dinner_slot}, ...]}"""
+    data = request.json
+    date_str = (data.get("date") or "").strip()
+    entries = data.get("assignments") or []
+    if not date_str:
+        return jsonify({"error": "日期不能为空"}), 400
+
+    db = get_db()
+    count = 0
+    for e in entries:
+        emp = (e.get("employee_name") or "").strip()
+        work_types = json.dumps(e.get("work_types") or [], ensure_ascii=False)
+        lunch_slot = (e.get("lunch_slot") or "").strip()
+        dinner_slot = (e.get("dinner_slot") or "").strip()
+        if not emp:
+            continue
+        db.execute(
+            "INSERT INTO daily_assignments(date, employee_name, work_types, lunch_slot, dinner_slot) "
+            "VALUES(?,?,?,?,?) ON CONFLICT(date, employee_name) DO UPDATE SET "
+            "work_types=excluded.work_types, lunch_slot=excluded.lunch_slot, dinner_slot=excluded.dinner_slot, "
+            "updated_at=datetime('now','localtime')",
+            (date_str, emp, work_types, lunch_slot, dinner_slot)
+        )
+        count += 1
+    db.commit()
+    return jsonify({"ok": True, "updated": count})
+
+
 # ==================== 辅助函数 ====================
 
 def _time_to_minutes(t):
@@ -485,17 +799,39 @@ def _calc_work_hours(start_time, end_time, lunch_start, lunch_end, dinner_start,
 def _parse_date(val):
     """尝试解析各种日期格式为 YYYY-MM-DD"""
     import re
-    val = val.strip()
-    # YYYY-MM-DD
-    if re.match(r"^\d{4}-\d{1,2}-\d{1,2}$", val):
-        return val
+    # 处理 datetime 对象（openpyxl 可能返回）
+    if isinstance(val, datetime):
+        return val.strftime("%Y-%m-%d")
+    val = str(val).strip()
+    # YYYY-MM-DD（可能带时间部分，如 "2026-05-01 00:00:00"）
+    m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s|T|$)", val)
+    if m:
+        return f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
     # YYYY/MM/DD
     if re.match(r"^\d{4}/\d{1,2}/\d{1,2}$", val):
         return val.replace("/", "-")
+    # YYYY.M.DD 或 YYYY.M.D
+    m = re.match(r"^(\d{4})\.(\d{1,2})\.(\d{1,2})$", val)
+    if m:
+        return f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
+    # YYYY年M月D日
+    m = re.match(r"^(\d{4})年(\d{1,2})月(\d{1,2})日$", val)
+    if m:
+        return f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
     # MM/DD/YYYY
     m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", val)
     if m:
         return f"{m.group(3)}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+    # M/D（月/日，如 2/1、5/01）
+    m = re.match(r"^(\d{1,2})/(\d{1,2})$", val)
+    if m:
+        now = datetime.now()
+        return f"{now.year}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+    # D日（如 1日、15日）
+    m = re.match(r"^(\d{1,2})日$", val)
+    if m:
+        now = datetime.now()
+        return f"{now.year}-{now.month:02d}-{m.group(1).zfill(2)}"
     # Excel 序列号
     try:
         n = float(val)
@@ -506,6 +842,31 @@ def _parse_date(val):
     except ValueError:
         pass
     return ""
+
+
+# ==================== 数据库管理 ====================
+
+@app.route("/api/db/download")
+def api_db_download():
+    """下载数据库文件"""
+    return send_file(DATABASE, as_attachment=True, download_name="schedule.db")
+
+
+@app.route("/api/db/stats")
+def api_db_stats():
+    """数据库统计信息"""
+    db = get_db()
+    emp_count = db.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
+    shift_count = db.execute("SELECT COUNT(*) FROM shifts").fetchone()[0]
+    sch_count = db.execute("SELECT COUNT(*) FROM schedules").fetchone()[0]
+    date_range = db.execute("SELECT MIN(schedule_date), MAX(schedule_date) FROM schedules").fetchone()
+    return jsonify({
+        "employees": emp_count,
+        "shifts": shift_count,
+        "schedules": sch_count,
+        "dateFrom": date_range[0] or "",
+        "dateTo": date_range[1] or ""
+    })
 
 
 # ==================== 静态文件 ====================
@@ -523,4 +884,11 @@ if __name__ == "__main__":
     print("  客服排班系统后端已启动")
     print("  打开浏览器访问: http://127.0.0.1:5000")
     print("=" * 50)
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+    try:
+        from waitress import serve
+        print("  使用 waitress 生产服务器")
+        serve(app, host="0.0.0.0", port=5000, threads=4)
+    except ImportError:
+        print("  waitress 未安装，使用开发服务器")
+        print("  建议执行: pip install waitress")
+        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
