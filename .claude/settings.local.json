@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(start \"\" \"d:\\\\Gitee项目\\\\排班系统\\\\排班系统.html\")"
+    ]
+  }
+}

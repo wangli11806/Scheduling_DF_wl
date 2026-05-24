@@ -3,322 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>智能排班系统 - 可视化排班管理</title>
-    <!-- 引入 XLSX 核心库用于 Excel 解析 -->
+    <title>客服排班系统 - 可视化排班管理</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
-    <!-- 可选字体与基础样式 -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
     <style>
-        * {
-            box-sizing: border-box;
-            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-        }
-        body {
-            background: #f1f5f9;
-            margin: 0;
-            padding: 24px 20px;
-        }
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        /* 头部卡片 */
+        * { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        body { background: #f1f5f9; margin: 0; padding: 24px 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
         .header-card {
-            background: white;
-            border-radius: 28px;
-            padding: 20px 28px;
+            background: white; border-radius: 28px; padding: 13px 18px;
             box-shadow: 0 8px 20px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.05);
-            margin-bottom: 28px;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
+            margin-bottom: 20px; display: flex; flex-wrap: wrap; align-items: center;
+            justify-content: space-between; gap: 16px;
         }
         h1 {
-            font-size: 1.8rem;
-            font-weight: 600;
+            font-size: 1.3rem; font-weight: 600;
             background: linear-gradient(135deg, #1e293b, #2d3a4f);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-            margin: 0;
-            letter-spacing: -0.3px;
+            background-clip: text; -webkit-background-clip: text; color: transparent;
+            margin: 0; letter-spacing: -0.3px;
         }
-        .sub {
-            color: #5b6e8c;
-            font-size: 0.9rem;
-            margin-top: 4px;
-        }
-        .toolbar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            align-items: center;
-        }
+        .sub { color: #5b6e8c; font-size: 0.78rem; margin-top: 2px; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
         .btn {
-            background: white;
-            border: 1px solid #cbd5e1;
-            padding: 8px 18px;
-            border-radius: 40px;
-            font-weight: 500;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background-color: #ffffff;
+            background: white; border: 1px solid #cbd5e1; padding: 8px 18px;
+            border-radius: 40px; font-weight: 500; font-size: 0.85rem; cursor: pointer;
+            transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 8px;
             color: #1e293b;
         }
-        .btn-primary {
-            background: #2c3e66;
-            border-color: #2c3e66;
-            color: white;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        }
-        .btn-primary:hover {
-            background: #1e2f4a;
-            transform: translateY(-1px);
-        }
-        .btn-outline {
-            border-color: #cbd5e1;
-        }
-        .btn-outline:hover {
-            background: #f8fafc;
-            border-color: #94a3b8;
-        }
-        .btn-danger-outline {
-            border-color: #fecdd3;
-            color: #be123c;
-        }
-        .btn-danger-outline:hover {
-            background: #fff1f2;
-            border-color: #fda4af;
-        }
-        .file-label {
-            position: relative;
-            cursor: pointer;
-        }
-        .file-label input {
-            position: absolute;
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        /* 主控面板 双视图切换 + 日期导航 */
+        .btn-primary { background: #2c3e66; border-color: #2c3e66; color: white; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .btn-primary:hover { background: #1e2f4a; transform: translateY(-1px); }
+        .btn-outline { border-color: #cbd5e1; }
+        .btn-outline:hover { background: #f8fafc; border-color: #94a3b8; }
+        .btn-danger-outline { border-color: #fecdd3; color: #be123c; }
+        .btn-danger-outline:hover { background: #fff1f2; border-color: #fda4af; }
+        .btn-warning { background: #f59e0b; border-color: #f59e0b; color: white; }
+        .btn-warning:hover { background: #d97706; }
+        .file-label { position: relative; cursor: pointer; }
+        .file-label input { position: absolute; opacity: 0; width: 0; height: 0; }
+
         .control-panel {
-            background: white;
-            border-radius: 24px;
-            padding: 16px 24px;
-            margin-bottom: 24px;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
-            gap: 15px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            background: white; border-radius: 24px; padding: 16px 24px; margin-bottom: 24px;
+            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+            gap: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);
         }
-        .view-toggle {
-            display: flex;
-            background: #eef2ff;
-            border-radius: 60px;
-            padding: 4px;
-            gap: 4px;
-        }
+        .view-toggle { display: flex; background: #eef2ff; border-radius: 60px; padding: 4px; gap: 4px; }
         .view-btn {
-            border: none;
-            background: transparent;
-            padding: 8px 24px;
-            border-radius: 40px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: 0.2s;
-            font-size: 0.85rem;
+            border: none; background: transparent; padding: 8px 24px; border-radius: 40px;
+            font-weight: 500; cursor: pointer; transition: 0.2s; font-size: 0.85rem;
         }
-        .view-btn.active {
-            background: white;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-            color: #1f3a64;
-        }
-        .date-nav {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background: #f8fafc;
-            padding: 6px 16px;
-            border-radius: 60px;
-        }
+        .view-btn.active { background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.08); color: #1f3a64; }
+        .date-nav { display: flex; align-items: center; gap: 12px; background: #f8fafc; padding: 6px 16px; border-radius: 60px; }
         .date-nav button {
-            background: none;
-            border: none;
-            font-size: 1.3rem;
-            cursor: pointer;
-            width: 30px;
-            height: 30px;
-            border-radius: 30px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
+            background: none; border: none; font-size: 1.3rem; cursor: pointer;
+            width: 30px; height: 30px; border-radius: 30px; display: inline-flex;
+            align-items: center; justify-content: center;
         }
         .week-range {
-            font-weight: 600;
-            background: white;
-            padding: 5px 14px;
-            border-radius: 40px;
-            font-size: 0.9rem;
-            min-width: 200px;
-            text-align: center;
+            font-weight: 600; background: white; padding: 5px 14px; border-radius: 40px;
+            font-size: 0.9rem; min-width: 200px; text-align: center;
         }
-        .batch-edit-area {
-            background: white;
-            border-radius: 24px;
-            margin-bottom: 24px;
-            padding: 20px 24px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
-            border: 1px solid #e9edf2;
-        }
-        .batch-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            flex-wrap: wrap;
-            margin-bottom: 14px;
-        }
-        .batch-header span {
-            font-weight: 600;
-            color: #0f172a;
-        }
-        .batch-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            align-items: flex-end;
-        }
-        .batch-field {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            font-size: 0.75rem;
-            color: #475569;
-        }
-        .batch-field input, .batch-field select {
-            padding: 8px 12px;
-            border-radius: 16px;
-            border: 1px solid #cbd5e1;
-            background: white;
-            font-size: 0.85rem;
-        }
-        .btn-small {
-            padding: 7px 16px;
-            font-size: 0.8rem;
-        }
-        /* 日历表格样式 (周视图 / 月视图基类) */
+
+        /* 排班表格 */
         .schedule-table-wrapper {
-            overflow-x: auto;
-            border-radius: 24px;
-            background: white;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.03);
-            border: 1px solid #edf2f7;
+            overflow-x: auto; border-radius: 24px; background: white;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.03); border: 1px solid #edf2f7;
         }
-        .schedule-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.85rem;
-            min-width: 700px;
-        }
+        .schedule-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 700px; }
         .schedule-table th {
-            background: #f9fbfd;
-            padding: 14px 8px;
-            border-bottom: 1px solid #e2e8f0;
-            font-weight: 600;
-            color: #2c3e66;
-            text-align: center;
+            background: #f9fbfd; padding: 14px 8px; border-bottom: 1px solid #e2e8f0;
+            font-weight: 600; color: #2c3e66; text-align: center;
         }
         .schedule-table td {
-            border: 1px solid #ecf3fa;
-            padding: 12px 6px;
-            text-align: center;
-            vertical-align: middle;
-            background-color: white;
-            transition: background 0.1s;
+            border: 1px solid #ecf3fa; padding: 10px 6px; text-align: center;
+            vertical-align: middle; background-color: white;
         }
-        .staff-cell {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
+
+        /* 班次颜色标签 */
+        .shift-tag {
+            display: inline-block; padding: 4px 14px; border-radius: 40px;
+            font-size: 0.78rem; font-weight: 600; min-width: 48px;
         }
-        .staff-name {
-            font-weight: 500;
-            font-size: 0.9rem;
+        .shift-tag.shift-work { background: #c8e6c9; color: #2e7d32; }
+        .shift-tag.shift-rest { background: #eeeeee; color: #616161; }
+        .shift-tag.shift-leave { background: #ffe0b2; color: #e65100; }
+        .shift-tag.shift-none { background: #f5f5f5; color: #bdbdbd; }
+
+        /* 员工信息列 */
+        .emp-info { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .emp-name { font-weight: 600; font-size: 0.9rem; color: #1e293b; }
+        .emp-team { font-weight: 600; font-size: 0.9rem; color: #1e293b; }
+
+        /* 月视图中紧凑的员工条目 */
+        .month-emp-row {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 4px; font-size: 0.72rem; gap: 4px;
         }
-        .shift-badge {
-            background: #eef2ff;
-            padding: 4px 12px;
-            border-radius: 40px;
-            font-size: 0.7rem;
-            font-weight: 500;
-            color: #1e40af;
-            display: inline-block;
+        .month-emp-name { color: #334155; white-space: nowrap; }
+        .month-shift-tag {
+            padding: 2px 8px; border-radius: 20px; font-size: 0.62rem; font-weight: 600;
+            white-space: nowrap;
         }
-        .edit-icon {
-            cursor: pointer;
-            opacity: 0.5;
-            font-size: 0.7rem;
-            background: #eef2ff;
-            width: 24px;
-            height: 24px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 30px;
-            transition: 0.2s;
+        .month-shift-tag.shift-work { background: #c8e6c9; color: #2e7d32; }
+        .month-shift-tag.shift-rest { background: #eeeeee; color: #616161; }
+        .month-shift-tag.shift-leave { background: #ffe0b2; color: #e65100; }
+        .month-shift-tag.shift-none { background: #f5f5f5; color: #bdbdbd; }
+
+        /* 弹窗遮罩 */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.45); z-index: 900;
+            align-items: center; justify-content: center;
         }
-        .edit-icon:hover {
-            opacity: 1;
-            background: #cbdff2;
+        .modal-overlay.active { display: flex; }
+        .modal-dialog {
+            background: white; border-radius: 24px; padding: 32px; width: 440px; max-width: 92vw;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
         }
-        .shift-select {
-            font-size: 0.75rem;
-            padding: 4px;
-            border-radius: 20px;
-            border: 1px solid #cbd5e1;
+        .modal-title { font-size: 1.15rem; font-weight: 600; color: #1e293b; margin-bottom: 24px; }
+        .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+        .modal-row label { font-size: 0.8rem; font-weight: 500; color: #475569; }
+        .modal-row select, .modal-row input[type="date"] {
+            padding: 10px 14px; border-radius: 16px; border: 1px solid #cbd5e1;
+            background: white; font-size: 0.9rem; width: 100%;
         }
-        .month-view .week-row {
-            display: flex;
-            border-bottom: 1px solid #eef2ff;
+        .radio-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        .radio-option { position: relative; }
+        .radio-option input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .radio-option label {
+            display: inline-block; padding: 8px 18px; border-radius: 40px;
+            border: 1.5px solid #cbd5e1; font-size: 0.82rem; cursor: pointer;
+            transition: all 0.15s; font-weight: 500; color: #475569;
         }
-        .month-day-cell {
-            flex: 1;
-            padding: 12px 4px;
-            border-right: 1px solid #eef2ff;
-            min-height: 100px;
+        .radio-option input:checked + label {
+            border-color: #2c3e66; background: #eef2ff; color: #1e3a5f; font-weight: 600;
         }
+        .radio-option input:checked + label.work { border-color: #2e7d32; background: #c8e6c9; color: #2e7d32; }
+        .radio-option input:checked + label.rest { border-color: #757575; background: #eeeeee; color: #424242; }
+        .radio-option input:checked + label.leave { border-color: #e65100; background: #ffe0b2; color: #e65100; }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+
         .toast-msg {
-            position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #1e293b;
-            color: white;
-            padding: 10px 24px;
-            border-radius: 60px;
-            font-size: 0.85rem;
-            z-index: 1000;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-            transition: 0.2s;
-            pointer-events: none;
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: #1e293b; color: white; padding: 10px 24px; border-radius: 60px;
+            font-size: 0.85rem; z-index: 1000; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+            transition: 0.2s; pointer-events: none;
         }
-        footer {
-            text-align: center;
-            margin-top: 36px;
-            font-size: 0.7rem;
-            color: #6c7a91;
-        }
+        footer { text-align: center; margin-top: 36px; font-size: 0.7rem; color: #6c7a91; }
         @media (max-width: 700px) {
-            .batch-field { width: 100%; }
             .header-card { flex-direction: column; align-items: flex-start; }
+            .modal-dialog { padding: 24px; }
         }
     </style>
 </head>
@@ -326,10 +159,11 @@
 <div class="container">
     <div class="header-card">
         <div>
-            <h1>📅 智能排班系统</h1>
+            <h1>📅 客服排班系统</h1>
             <div class="sub">可视化排班 · 批量编辑 · Excel导入导出</div>
         </div>
         <div class="toolbar">
+            <button class="btn btn-warning" id="editScheduleBtn">✏️ 修改排班</button>
             <button class="btn btn-primary" id="exportExcelBtn">📎 导出 Excel</button>
             <label class="btn btn-outline file-label">
                 📂 上传 Excel 更新排班
@@ -350,126 +184,110 @@
             <button id="nextPeriodBtn">▶</button>
         </div>
         <div class="toolbar">
-            <button class="btn btn-small btn-outline" id="todayBtn">今天</button>
+            <button class="btn btn-outline" id="todayBtn">今天</button>
         </div>
     </div>
 
-    <!-- 批量编辑面板 -->
-    <div class="batch-edit-area">
-        <div class="batch-header">
-            <span>✏️ 批量编辑排班 (按员工/日期范围)</span>
-            <span style="font-size:0.7rem;">班次类型: 早班/中班/晚班/休息</span>
-        </div>
-        <div class="batch-grid">
-            <div class="batch-field">
-                <label>员工姓名</label>
-                <input type="text" id="batchEmployee" placeholder="例: 张三" list="employeeListDatalist">
-                <datalist id="employeeListDatalist"></datalist>
-            </div>
-            <div class="batch-field">
-                <label>起始日期</label>
-                <input type="date" id="batchStartDate">
-            </div>
-            <div class="batch-field">
-                <label>结束日期</label>
-                <input type="date" id="batchEndDate">
-            </div>
-            <div class="batch-field">
-                <label>班次</label>
-                <select id="batchShift">
-                    <option value="早班">🌞 早班</option>
-                    <option value="中班">☀️ 中班</option>
-                    <option value="晚班">🌙 晚班</option>
-                    <option value="休息">💤 休息</option>
-                </select>
-            </div>
-            <button class="btn btn-primary btn-small" id="applyBatchBtn">✔ 批量更新</button>
-            <button class="btn btn-outline btn-small" id="clearBatchBtn">清除范围</button>
-        </div>
-        <div style="font-size:0.7rem; margin-top:10px; color:#4b5563;">* 支持直接点击表格内班次快速编辑单个单元格</div>
-    </div>
-
-    <!-- 视图容器：周视图/月视图动态渲染 -->
+    <!-- 视图容器 -->
     <div id="scheduleViewContainer" class="schedule-table-wrapper"></div>
-    <footer>提示：支持上传标准Excel(列：日期,员工,班次)自动合并更新；批量编辑可按员工+日期区间一键改班次</footer>
+    <footer>提示：点击"修改排班"按钮可编辑单个排班；上传Excel(列：日期,员工,班次)可批量导入</footer>
 </div>
+
+<!-- 修改排班弹窗 -->
+<div class="modal-overlay" id="editModal">
+    <div class="modal-dialog">
+        <div class="modal-title">✏️ 修改排班</div>
+        <div class="modal-row">
+            <label>选择员工</label>
+            <select id="modalEmployee"></select>
+        </div>
+        <div class="modal-row">
+            <label>选择日期</label>
+            <input type="date" id="modalDate">
+        </div>
+        <div class="modal-row">
+            <label>选择班次</label>
+            <div class="radio-group" id="modalShiftRadios"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" id="modalCancelBtn">取消</button>
+            <button class="btn btn-primary" id="modalSaveBtn">保存</button>
+        </div>
+    </div>
+</div>
+
 <div id="toastMsg" class="toast-msg" style="display: none;"></div>
 
 <script>
-    // ---------- 模拟初始排班数据 ----------
-    // 数据结构: Map key = "YYYY-MM-DD|员工姓名" , value = 班次字符串
-    let scheduleMap = new Map(); 
-    // 员工列表
-    let employees = ["张三", "李四", "王芳", "赵磊", "陈敏"];
-    // 班次选项
-    const shiftOptions = ["早班", "中班", "晚班", "休息"];
-    
-    // 辅助日期工具
+    // ---------- 数据 ----------
+    let scheduleMap = new Map();
+    const teamOptions = ["在线组", "热线组", "售后组", "主管", "综合组"];
+    const shiftOptions = ["A班", "B班", "C班", "休息", "请假"];
+    const workShifts = ["A班", "B班", "C班"];
+
+    // 员工列表: {name, team}
+    let employees = [
+        {name: "张三", team: "在线组"},
+        {name: "李四", team: "热线组"},
+        {name: "王芳", team: "售后组"},
+        {name: "赵磊", team: "在线组"},
+        {name: "陈敏", team: "主管"}
+    ];
+
+    function getEmployeeNames() { return employees.map(e => e.name); }
+    function getEmployeeByName(name) { return employees.find(e => e.name === name); }
+
+    // 获取班次CSS类
+    function getShiftClass(shift) {
+        if (workShifts.includes(shift)) return "shift-work";
+        if (shift === "休息") return "shift-rest";
+        if (shift === "请假") return "shift-leave";
+        return "shift-none";
+    }
+
+    function getShortShift(shift) {
+        if (shift === "A班") return "A";
+        if (shift === "B班") return "B";
+        if (shift === "C班") return "C";
+        if (shift === "休息") return "休";
+        if (shift === "请假") return "假";
+        return "-";
+    }
+
+    // 日期工具
     function formatDate(date) { return date.toISOString().slice(0,10); }
     function parseDate(str) { return new Date(str + "T00:00:00"); }
-    
-    // 生成随机排班demo (2025年5月19日~2025年6月15日区间演示)
+
+    // 初始化演示数据
     function initDemoData() {
         scheduleMap.clear();
-        const startDemo = new Date(2025, 4, 19); // 5月19日
-        const endDemo = new Date(2025, 5, 15);   // 6月15日
+        const startDemo = new Date(2025, 4, 19);
+        const endDemo = new Date(2025, 5, 15);
         let cur = new Date(startDemo);
+        const names = getEmployeeNames();
         while(cur <= endDemo) {
             const dateStr = formatDate(cur);
-            employees.forEach(emp => {
+            names.forEach(emp => {
                 const rand = Math.floor(Math.random() * shiftOptions.length);
                 scheduleMap.set(`${dateStr}|${emp}`, shiftOptions[rand]);
             });
             cur.setDate(cur.getDate() + 1);
         }
-        // 保证一些可见典型数据
-        scheduleMap.set("2025-05-20|张三","早班");
+        scheduleMap.set("2025-05-20|张三","A班");
         scheduleMap.set("2025-05-21|李四","休息");
-        scheduleMap.set("2025-05-22|王芳","晚班");
+        scheduleMap.set("2025-05-22|王芳","C班");
     }
-    
-    // 获取某日某员工班次
+
     function getShift(date, emp) {
-        const key = `${date}|${emp}`;
-        return scheduleMap.get(key) || "未排班";
+        return scheduleMap.get(`${date}|${emp}`) || "未排班";
     }
-    
+
     function setShift(date, emp, shift) {
         if(!shift || shift === "未排班") shift = "休息";
-        const key = `${date}|${emp}`;
-        scheduleMap.set(key, shift);
+        scheduleMap.set(`${date}|${emp}`, shift);
     }
-    
-    // 批量更新
-    function batchUpdate(employee, startDateStr, endDateStr, newShift) {
-        if(!employee || !startDateStr || !endDateStr) {
-            showToast("请填写完整的员工姓名和起止日期");
-            return false;
-        }
-        if(!employees.includes(employee)) {
-            showToast(`员工 "${employee}" 不在列表中，请从现有员工中选择`);
-            return false;
-        }
-        let start = parseDate(startDateStr);
-        let end = parseDate(endDateStr);
-        if(isNaN(start) || isNaN(end) || start > end) {
-            showToast("日期范围无效");
-            return false;
-        }
-        let current = new Date(start);
-        let updatedCount = 0;
-        while(current <= end) {
-            const dStr = formatDate(current);
-            setShift(dStr, employee, newShift);
-            updatedCount++;
-            current.setDate(current.getDate() + 1);
-        }
-        showToast(`✅ 批量更新完成: 为 ${employee} 更新了 ${updatedCount} 天的班次为 ${newShift}`);
-        renderCurrentView();
-        return true;
-    }
-    
-    // 上传Excel并合并排班 (列映射: 日期, 员工, 班次)
+
+    // Excel 导入
     function importExcelAndMerge(file) {
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -487,10 +305,10 @@
                 else if(cell.includes("班次") || cell.includes("shift")) shiftIdx = i;
             }
             if(dateIdx === -1 || empIdx === -1 || shiftIdx === -1) {
-                showToast("Excel需包含【日期,员工,班次】三列(支持列名含关键字)");
-                return;
+                showToast("Excel需包含【日期,员工,班次】三列"); return;
             }
             let updated = 0;
+            const names = getEmployeeNames();
             for(let i=1; i<rows.length; i++) {
                 let row = rows[i];
                 if(!row || row.length < Math.max(dateIdx, empIdx, shiftIdx)+1) continue;
@@ -500,45 +318,37 @@
                 if(!rawDate || !employee || !shift) continue;
                 let dateObj = new Date(rawDate);
                 if(isNaN(dateObj.getTime())) {
-                    // 尝试解析 yyyy-mm-dd 字符串
                     let parts = String(rawDate).split('-');
                     if(parts.length===3) dateObj = new Date(parts[0], parts[1]-1, parts[2]);
                     if(isNaN(dateObj.getTime())) continue;
                 }
                 const dateStr = formatDate(dateObj);
-                if(!employees.includes(employee)) {
-                    // 如果员工不存在, 动态添加到员工库 (但为了体验友好)
-                    employees.push(employee);
-                    rebuildEmployeeDatalist();
+                if(!names.includes(employee)) {
+                    employees.push({name: employee, team: "综合组"});
+                    names.push(employee);
+                    rebuildEmployeeSelects();
                 }
-                if(shiftOptions.includes(shift) || shift === "休息") {
-                    setShift(dateStr, employee, shift);
-                    updated++;
-                } else {
-                    setShift(dateStr, employee, "休息");
-                    updated++;
-                }
+                setShift(dateStr, employee, shift);
+                updated++;
             }
-            showToast(`📥 成功导入并更新 ${updated} 条排班记录`);
+            showToast(`成功导入并更新 ${updated} 条排班记录`);
             renderCurrentView();
         };
         reader.readAsArrayBuffer(file);
     }
-    
-    // 导出当前可见范围? 导出全量数据(简单导出所有排班记录)
+
+    // Excel 导出
     function exportToExcel() {
-        let dataRows = [["日期", "员工", "班次"]];
-        // 收集所有已有key排班
+        let dataRows = [["日期", "员工", "所属团队", "班次"]];
         let dateSet = new Set();
         for(let key of scheduleMap.keys()) {
-            let [dateStr, emp] = key.split('|');
-            dateSet.add(dateStr);
+            dateSet.add(key.split('|')[0]);
         }
         let sortedDates = Array.from(dateSet).sort();
         for(let date of sortedDates) {
             for(let emp of employees) {
-                let shift = getShift(date, emp);
-                dataRows.push([date, emp, shift]);
+                let shift = getShift(date, emp.name);
+                dataRows.push([date, emp.name, emp.team, shift]);
             }
         }
         const ws = XLSX.utils.aoa_to_sheet(dataRows);
@@ -547,64 +357,59 @@
         XLSX.writeFile(wb, `排班数据_${formatDate(new Date())}.xlsx`);
         showToast("导出完成");
     }
-    
+
     // 视图状态
-    let currentView = "week";   // week / month
-    let currentBaseDate = new Date(2025, 4, 26); // 基准周起始锚点(5月26那周)
-    
-    // 获取某周第一天周一
+    let currentView = "week";
+    let currentBaseDate = new Date(2025, 4, 26);
+
     function getStartOfWeek(date) {
         const d = new Date(date);
         const day = d.getDay();
-        const diff = (day === 0 ? -6 : 1 - day);
-        d.setDate(d.getDate() + diff);
+        d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
         return d;
     }
-    
-    // 渲染周视图 (表格：员工为行，日期为列)
+
+    // 周视图
     function renderWeekView(baseDate) {
         const startWeek = getStartOfWeek(baseDate);
         const days = [];
-        for(let i=0;i<7;i++) {
+        for(let i=0; i<7; i++) {
             let day = new Date(startWeek);
             day.setDate(startWeek.getDate() + i);
             days.push(formatDate(day));
         }
-        const html = `
+        return `
             <table class="schedule-table">
                 <thead>
-                    <tr><th>员工 \\ 日期</th>
-                    ${days.map(d => `<th>${d}<br><span style="font-weight:normal">${new Date(d).toLocaleDateString('zh-CN',{weekday:'short'})}</span></th>`).join('')}
-                </tr>
+                    <tr>
+                        <th style="min-width:100px;">员工</th>
+                        <th style="min-width:100px;">团队</th>
+                        ${days.map(d => `<th>${d}<br><span style="font-weight:normal">${new Date(d).toLocaleDateString('zh-CN',{weekday:'short'})}</span></th>`).join('')}
+                    </tr>
                 </thead>
                 <tbody>
                     ${employees.map(emp => `
                         <tr>
-                            <td style="background:#fafcff; font-weight:600;">${emp}</td>
+                            <td style="background:#fafcff;"><div class="emp-info"><span class="emp-name">${emp.name}</span></div></td>
+                            <td style="background:#fafcff;"><div class="emp-info"><span class="emp-team">${emp.team}</span></div></td>
                             ${days.map(dateStr => {
-                                let shiftVal = getShift(dateStr, emp);
-                                return `<td class="editable-cell" data-employee="${emp}" data-date="${dateStr}" data-shift="${shiftVal}">
-                                    <div class="staff-cell">
-                                        <span class="shift-badge">${shiftVal}</span>
-                                        <span class="edit-icon" data-action="edit" data-emp="${emp}" data-date="${dateStr}">✎</span>
-                                    </div>
-                                </td>`;
+                                let shiftVal = getShift(dateStr, emp.name);
+                                let cls = getShiftClass(shiftVal);
+                                return `<td><span class="shift-tag ${cls}">${shiftVal}</span></td>`;
                             }).join('')}
                         </tr>
                     `).join('')}
                 </tbody>
-            </table>
-        `;
-        return html;
+            </table>`;
     }
-    
-    // 月视图简易: 按天矩阵，单元格展示每个员工的小列表 (紧凑)
+
+    // 月视图
     function renderMonthView(baseDate) {
         const year = baseDate.getFullYear();
         const month = baseDate.getMonth();
         const firstDayOfMonth = new Date(year, month, 1);
         const startDate = new Date(firstDayOfMonth);
-        startDate.setDate(1 - (startDate.getDay() === 0 ? 7 : startDate.getDay())); // 从周一开始
+        startDate.setDate(1 - (startDate.getDay() === 0 ? 7 : startDate.getDay()));
         const weeks = [];
         let current = new Date(startDate);
         for(let w=0; w<6; w++) {
@@ -615,121 +420,110 @@
             }
             weeks.push(weekDays);
         }
-        // 月视图构建表格: 列是日期，每个单元格内展示所有员工当日的班次精简信息
         let html = `<div style="overflow-x:auto;"><table class="schedule-table"><thead><tr><th style="min-width:80px">日期</th>`;
         for(let i=0; i<7; i++) html += `<th>${["一","二","三","四","五","六","日"][i]}</th>`;
-        html+=`</tr></thead><tbody>`;
+        html += `</tr></thead><tbody>`;
         for(let week of weeks) {
-            html+=`<tr>`;
+            html += `<tr>`;
             for(let dateStr of week) {
                 const dateObj = new Date(dateStr);
                 const isCurrentMonth = dateObj.getMonth() === month;
                 const bgStyle = isCurrentMonth ? '' : 'background:#f9f9fc; opacity:0.7';
-                html+=`<td style="vertical-align:top; ${bgStyle}"><div style="font-weight:600; font-size:0.75rem; padding-bottom:6px;">${dateStr.slice(5)}</div>`;
+                html += `<td style="vertical-align:top; ${bgStyle}"><div style="font-weight:600; font-size:0.75rem; padding-bottom:6px;">${dateStr.slice(5)}</div>`;
                 for(let emp of employees) {
-                    let shift = getShift(dateStr, emp);
-                    let shortShift = shift === "早班"?"早": shift==="中班"?"中": shift==="晚班"?"晚":"休";
-                    html+=`<div style="font-size:0.7rem; display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
-                        <span style="color:#334155;">${emp}</span>
-                        <span class="shift-badge" style="font-size:0.6rem; padding:2px 8px;">${shortShift}</span>
-                        <span class="edit-icon" data-action="edit" data-emp="${emp}" data-date="${dateStr}" style="font-size:0.6rem;">✎</span>
+                    let shift = getShift(dateStr, emp.name);
+                    let short = getShortShift(shift);
+                    let cls = getShiftClass(shift);
+                    html += `<div class="month-emp-row">
+                        <span class="month-emp-name">${emp.name}</span>
+                        <span class="month-shift-tag ${cls}">${short}</span>
                     </div>`;
                 }
-                html+=`</td>`;
+                html += `</td>`;
             }
-            html+=`</tr>`;
+            html += `</tr>`;
         }
-        html+=`</tbody></table></div>`;
+        html += `</tbody></table></div>`;
         return html;
     }
-    
-    // 编辑模态框简单内嵌，使用prompt式轻编辑(也可以用更友好，但满足核心)
-    function handleInlineEdit(emp, dateStr) {
-        let currentShift = getShift(dateStr, emp);
-        let newShift = prompt(`编辑 ${emp} 在 ${dateStr} 的班次`, currentShift);
-        if(newShift && (shiftOptions.includes(newShift) || newShift === "休息")) {
-            setShift(dateStr, emp, newShift);
-            renderCurrentView();
-            showToast(`已更新 ${emp} ${dateStr} 班次为 ${newShift}`);
-        } else if(newShift) {
-            showToast("班次无效，请输入: 早班/中班/晚班/休息");
-        }
+
+    // 弹窗逻辑
+    function openEditModal() {
+        document.getElementById("modalDate").value = formatDate(new Date());
+        buildModalShiftRadios();
+        document.getElementById("editModal").classList.add("active");
     }
-    
+
+    function closeEditModal() {
+        document.getElementById("editModal").classList.remove("active");
+    }
+
+    function buildModalShiftRadios() {
+        const container = document.getElementById("modalShiftRadios");
+        const colors = {A班:"work", B班:"work", C班:"work", 休息:"rest", 请假:"leave"};
+        container.innerHTML = shiftOptions.map(s =>
+            `<div class="radio-option">
+                <input type="radio" name="modalShift" value="${s}" id="ms_${s}" ${s==="A班"?"checked":""}>
+                <label for="ms_${s}" class="${colors[s]||''}">${s}</label>
+            </div>`
+        ).join('');
+    }
+
+    function saveModalEdit() {
+        const emp = document.getElementById("modalEmployee").value;
+        const date = document.getElementById("modalDate").value;
+        const shiftRadio = document.querySelector('input[name="modalShift"]:checked');
+        if(!emp) { showToast("请选择员工"); return; }
+        if(!date) { showToast("请选择日期"); return; }
+        const shift = shiftRadio ? shiftRadio.value : "A班";
+        setShift(date, emp, shift);
+        renderCurrentView();
+        showToast(`已更新 ${emp} ${date} 班次为 ${shift}`);
+        closeEditModal();
+    }
+
+    // 重建所有员工选择框
+    function rebuildEmployeeSelects() {
+        const sel = document.getElementById("modalEmployee");
+        if(!sel) return;
+        sel.innerHTML = '<option value="">-- 请选择 --</option>' +
+            employees.map(e => `<option value="${e.name}">${e.name} (${e.team})</option>`).join('');
+    }
+
     function renderCurrentView() {
         const container = document.getElementById("scheduleViewContainer");
-        let html = "";
         if(currentView === "week") {
-            html = renderWeekView(currentBaseDate);
-            // 更新日期label
+            container.innerHTML = renderWeekView(currentBaseDate);
             let start = getStartOfWeek(currentBaseDate);
             let end = new Date(start);
             end.setDate(start.getDate() + 6);
             document.getElementById("dateRangeLabel").innerHTML = `${formatDate(start)} ~ ${formatDate(end)}`;
         } else {
-            html = renderMonthView(currentBaseDate);
+            container.innerHTML = renderMonthView(currentBaseDate);
             document.getElementById("dateRangeLabel").innerHTML = `${currentBaseDate.getFullYear()}年${currentBaseDate.getMonth()+1}月`;
         }
-        container.innerHTML = html;
-        // 绑定编辑事件委托
-        container.querySelectorAll('.edit-icon').forEach(el => {
-            el.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const emp = el.getAttribute('data-emp');
-                const date = el.getAttribute('data-date');
-                if(emp && date) handleInlineEdit(emp, date);
-            });
-        });
-        // 周视图单元格点击也可编辑 (双重保险)
-        container.querySelectorAll('.editable-cell').forEach(cell => {
-            cell.style.cursor = "pointer";
-            cell.addEventListener('dblclick', (e) => {
-                const emp = cell.getAttribute('data-employee');
-                const date = cell.getAttribute('data-date');
-                if(emp && date) handleInlineEdit(emp, date);
-            });
-        });
     }
-    
-    function rebuildEmployeeDatalist() {
-        const datalist = document.getElementById("employeeListDatalist");
-        datalist.innerHTML = "";
-        employees.forEach(emp => {
-            let opt = document.createElement("option");
-            opt.value = emp;
-            datalist.appendChild(opt);
-        });
-    }
-    
+
     function showToast(msg) {
         const toast = document.getElementById("toastMsg");
         toast.innerText = msg;
         toast.style.display = "block";
         setTimeout(() => { toast.style.display = "none"; }, 2500);
     }
-    
-    // 导航逻辑
+
     function prevPeriod() {
         if(currentView === "week") {
-            let newBase = new Date(currentBaseDate);
-            newBase.setDate(currentBaseDate.getDate() - 7);
-            currentBaseDate = newBase;
+            currentBaseDate.setDate(currentBaseDate.getDate() - 7);
         } else {
-            let newMonth = new Date(currentBaseDate);
-            newMonth.setMonth(currentBaseDate.getMonth() - 1);
-            currentBaseDate = newMonth;
+            currentBaseDate.setMonth(currentBaseDate.getMonth() - 1);
         }
         renderCurrentView();
     }
     function nextPeriod() {
         if(currentView === "week") {
-            let newBase = new Date(currentBaseDate);
-            newBase.setDate(currentBaseDate.getDate() + 7);
-            currentBaseDate = newBase;
+            currentBaseDate.setDate(currentBaseDate.getDate() + 7);
         } else {
-            let newMonth = new Date(currentBaseDate);
-            newMonth.setMonth(currentBaseDate.getMonth() + 1);
-            currentBaseDate = newMonth;
+            currentBaseDate.setMonth(currentBaseDate.getMonth() + 1);
         }
         renderCurrentView();
     }
@@ -737,12 +531,12 @@
         currentBaseDate = new Date();
         renderCurrentView();
     }
-    
-    // 初始化事件及默认
+
     function init() {
         initDemoData();
-        rebuildEmployeeDatalist();
+        rebuildEmployeeSelects();
         renderCurrentView();
+
         document.querySelectorAll('.view-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
@@ -754,19 +548,7 @@
         document.getElementById("prevPeriodBtn").addEventListener("click", prevPeriod);
         document.getElementById("nextPeriodBtn").addEventListener("click", nextPeriod);
         document.getElementById("todayBtn").addEventListener("click", goToday);
-        document.getElementById("applyBatchBtn").addEventListener("click", () => {
-            const emp = document.getElementById("batchEmployee").value.trim();
-            const start = document.getElementById("batchStartDate").value;
-            const end = document.getElementById("batchEndDate").value;
-            const shift = document.getElementById("batchShift").value;
-            if(emp && start && end) batchUpdate(emp, start, end, shift);
-            else showToast("请完整填写批量编辑字段");
-        });
-        document.getElementById("clearBatchBtn").addEventListener("click", () => {
-            document.getElementById("batchEmployee").value = "";
-            document.getElementById("batchStartDate").value = "";
-            document.getElementById("batchEndDate").value = "";
-        });
+
         document.getElementById("exportExcelBtn").addEventListener("click", exportToExcel);
         document.getElementById("uploadExcelInput").addEventListener("change", (e) => {
             if(e.target.files.length) importExcelAndMerge(e.target.files[0]);
@@ -776,6 +558,15 @@
             initDemoData();
             renderCurrentView();
             showToast("已重置为示例排班数据");
+        });
+
+        // 修改排班弹窗
+        document.getElementById("editScheduleBtn").addEventListener("click", openEditModal);
+        document.getElementById("modalCancelBtn").addEventListener("click", closeEditModal);
+        document.getElementById("modalSaveBtn").addEventListener("click", saveModalEdit);
+        // 点击遮罩关闭
+        document.getElementById("editModal").addEventListener("click", (e) => {
+            if(e.target === document.getElementById("editModal")) closeEditModal();
         });
     }
     init();
