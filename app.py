@@ -487,9 +487,9 @@ def api_schedules_import():
 
     from openpyxl import load_workbook
     try:
-        wb = load_workbook(file, read_only=True)
-    except Exception:
-        return jsonify({"error": "无法解析该文件，请上传 .xlsx 格式的 Excel（不支持旧版 .xls 格式）"}), 400
+        wb = load_workbook(file)
+    except Exception as e:
+        return jsonify({"error": f"无法解析该文件：{e}"}), 400
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     if len(rows) < 2:
@@ -547,24 +547,27 @@ def api_schedules_import_matrix():
 
     from openpyxl import load_workbook
     try:
-        wb = load_workbook(file, read_only=True)
-    except Exception:
-        return jsonify({"error": "无法解析该文件，请上传 .xlsx 格式的 Excel（不支持旧版 .xls 格式）"}), 400
+        wb = load_workbook(file)
+    except Exception as e:
+        return jsonify({"error": f"无法解析该文件：{e}"}), 400
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     if len(rows) < 2:
         return jsonify({"error": "Excel至少包含表头和数据行"}), 400
 
     # 解析表头：第一列是"姓名"，其余列是日期
-    header = [str(c or "").strip() for c in rows[0]]
+    raw_header = rows[0]
+    header = [str(c or "").strip() for c in raw_header]
     dates = []
-    for i in range(1, len(header)):
-        d = _parse_date(header[i])
+    for i in range(1, len(raw_header)):
+        # 优先用原始值解析（可能是 datetime 对象），字符串版本作为备选
+        d = _parse_date(raw_header[i]) or _parse_date(header[i])
         if d:
             dates.append((i, d))
 
     if not dates:
-        return jsonify({"error": "未识别到日期列，表头请使用日期格式（如2026-02-01或2/1）"}), 400
+        sample = "、".join(header[1:6])
+        return jsonify({"error": f"未识别到日期列，表头前几列为：{sample}。请使用日期格式（如2026-02-01、2/1、1日）"}), 400
 
     # 加载班次表，构建名称→名称的映射
     db = get_db()
@@ -827,11 +830,24 @@ def _parse_date(val):
     if m:
         now = datetime.now()
         return f"{now.year}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
+    # M月D日（如 5月1日、12月15日）
+    m = re.match(r"^(\d{1,2})月(\d{1,2})日$", val)
+    if m:
+        now = datetime.now()
+        return f"{now.year}-{m.group(1).zfill(2)}-{m.group(2).zfill(2)}"
     # D日（如 1日、15日）
     m = re.match(r"^(\d{1,2})日$", val)
     if m:
         now = datetime.now()
         return f"{now.year}-{now.month:02d}-{m.group(1).zfill(2)}"
+    # 纯数字 1-31（日数）
+    try:
+        n = int(val)
+        if 1 <= n <= 31:
+            now = datetime.now()
+            return f"{now.year}-{now.month:02d}-{n:02d}"
+    except (ValueError, TypeError):
+        pass
     # Excel 序列号
     try:
         n = float(val)

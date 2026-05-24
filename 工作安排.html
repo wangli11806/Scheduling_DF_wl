@@ -131,10 +131,10 @@
             padding: 10px 4px; position: sticky; top: 0; z-index: 2;
         }
         .assign-table .col-shift { width: 44px; }
-        .assign-table .col-name { width: 66px; }
+        .assign-table .col-name { width: 64px; }
         .assign-table .col-team { width: 60px; }
-        .assign-table .col-work { width: 58px; }
-        .assign-table .col-meal { width: 100px; }
+        .assign-table .col-work { width: 42px; }
+        .assign-table .col-meal { width: 120px; }
 
         .assign-table tbody td { height: 38px; }
         .assign-table tbody tr:hover td { background: #eef2ff; }
@@ -161,6 +161,13 @@
 
         .emp-name-cell { font-weight: 600; font-size: 0.85rem; color: #1e293b; }
         .emp-shift-cell { font-size: 0.8rem; font-weight: 500; }
+        .team-bg-在线组 { background: #e8f5e9; }
+        .team-bg-热线组 { background: #e3f2fd; }
+        .team-bg-售后组 { background: #fff3e0; }
+        .team-bg-综合组 { background: #f3e5f5; }
+        .team-bg-VIP组 { background: #fce4ec; }
+        .team-bg-质检组 { background: #fff8e1; }
+        .team-bg-支持组 { background: #e0f2f1; }
 
         .toast-msg {
             position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -338,26 +345,26 @@ function renderTable() {
         working = working.filter(e => filterSelectedShifts.includes(getShift(dateStr, e.name)));
     }
 
-    // 排序：班次 → 团队 → 姓名
+    // 排序：团队 → 班次 → 姓名
     const TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
     working.sort((a, b) => {
+        const ta = TEAM_ORDER.indexOf(a.team), tb = TEAM_ORDER.indexOf(b.team);
+        if (ta !== tb) return (ta === -1 ? 999 : ta) - (tb === -1 ? 999 : tb);
         const sa = getShift(dateStr, a.name);
         const sb = getShift(dateStr, b.name);
         if (sa !== sb) return (sa || "").localeCompare(sb || "");
-        const ta = TEAM_ORDER.indexOf(a.team), tb = TEAM_ORDER.indexOf(b.team);
-        if (ta !== tb) return (ta === -1 ? 999 : ta) - (tb === -1 ? 999 : tb);
         return a.name.localeCompare(b.name, 'zh');
     });
 
     // 表头
     document.getElementById("assignTableHead").innerHTML = `
         <tr>
-            <th class="col-shift">班次</th>
             <th class="col-team">团队</th>
+            <th class="col-shift">班次</th>
             <th class="col-name">姓名</th>
             ${WORK_TYPES.map(w => `<th class="col-work">${w}</th>`).join('')}
-            <th class="col-meal">午餐</th>
-            <th class="col-meal">晚餐</th>
+            <th class="col-meal">午餐时间</th>
+            <th class="col-meal">晚餐时间</th>
         </tr>`;
 
     // 汇总行：统计每个工作类型被安排的人数
@@ -378,8 +385,8 @@ function renderTable() {
     // 数据行
     const bodyHTML = [
         `<tr class="summary-row">
-            <td class="col-shift"></td>
             <td class="col-team"></td>
+            <td class="col-shift"></td>
             <td class="col-name">${working.length}人</td>
             ${WORK_TYPES.map(w => `<td class="col-work">${workCounts[w] || ''}</td>`).join('')}
             <td class="col-meal">${lunchCount || ''}</td>
@@ -391,8 +398,8 @@ function renderTable() {
             const shift = getShift(dateStr, e.name);
             return `
                 <tr data-emp="${e.name}">
+                    <td class="col-team team-bg-${e.team}" style="font-size:0.82rem;color:#475569;font-weight:600;">${e.team}</td>
                     <td class="col-shift emp-shift-cell ${getShiftClass(shift)}" style="font-weight:600;">${shift}</td>
-                    <td class="col-team" style="font-size:0.82rem;color:#475569;font-weight:600;">${e.team}</td>
                     <td class="col-name emp-name-cell">${e.name}${e.position==='主管'?' 👑':''}</td>
                     ${WORK_TYPES.map(w => {
                         const assigned = myWorks.has(w);

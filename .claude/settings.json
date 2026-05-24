@@ -32,7 +32,9 @@
       "Bash(\"D:/Scripts/pip.exe\" install *)",
       "Bash(cmd //c \"D:\\\\python.exe -c \\\\\"import sys; print\\([p for p in sys.path if 'Lib' in p]\\)\\\\\" 2>&1\")",
       "Bash(cmd //c \"D:\\\\python.exe -c \\\\\"import sys; sys.path.insert\\(0, 'D:\\\\\\\\\\\\\\\\Lib\\\\\\\\\\\\\\\\site-packages'\\); import pip; print\\('ok'\\)\\\\\" 2>&1\")",
-      "Bash(cmd //c 'D:\\\\python.exe -c \"import sys; print\\([p for p in sys.path]\\)\"')"
+      "Bash(cmd //c 'D:\\\\python.exe -c \"import sys; print\\([p for p in sys.path]\\)\"')",
+      "Bash(cd \"d:\\\\\\\\Gitee项目\\\\\\\\排班系统\")",
+      "Bash(cmd.exe /c \"python --version 2>&1\")"
     ]
   }
 }

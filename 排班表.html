@@ -191,6 +191,51 @@
             white-space: nowrap; transition: opacity 0.1s;
         }
 
+        /* 班次修改气泡窗 */
+        .shift-popover {
+            position: fixed; z-index: 950;
+            background: white; border-radius: 16px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+            padding: 20px 22px; min-width: 300px;
+        }
+        .shift-popover .popover-title {
+            font-weight: 700; font-size: 0.95rem; color: #1e293b;
+            margin-bottom: 14px; text-align: center;
+        }
+        .shift-popover .popover-body {
+            display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+            margin-bottom: 16px;
+        }
+        .shift-popover .popover-shift-option {
+            padding: 6px 16px; border-radius: 40px; font-size: 0.9rem;
+            font-weight: 600; cursor: pointer; border: 2px solid transparent;
+            transition: 0.15s; user-select: none;
+        }
+        .shift-popover .popover-shift-option:hover { filter: brightness(0.92); }
+        .shift-popover .popover-shift-option.selected {
+            border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.25);
+        }
+        .shift-popover .popover-shift-option.opt-A班 { background: #bbdefb; color: #1565c0; }
+        .shift-popover .popover-shift-option.opt-B班 { background: #b2dfdb; color: #00695c; }
+        .shift-popover .popover-shift-option.opt-C班 { background: #e1bee7; color: #7b1fa2; }
+        .shift-popover .popover-shift-option.opt-T班 { background: #c5cae9; color: #283593; }
+        .shift-popover .popover-shift-option.opt-E班 { background: #fff9c4; color: #f57f17; }
+        .shift-popover .popover-shift-option.opt-F班 { background: #f8bbd0; color: #ad1457; }
+        .shift-popover .popover-shift-option.opt-休息 { background: #f2f2f2; color: #9e9e9e; }
+        .shift-popover .popover-shift-option.opt-放休 { background: #e0e0e0; color: #757575; }
+        .shift-popover .popover-shift-option.opt-请假 { background: #fff3e0; color: #bf360c; }
+        .shift-popover .popover-actions {
+            display: flex; gap: 10px; justify-content: center;
+        }
+        .shift-popover .popover-btn {
+            padding: 7px 28px; border-radius: 40px; font-size: 0.9rem;
+            font-weight: 600; cursor: pointer; border: none; transition: 0.15s;
+        }
+        .shift-popover .popover-btn-cancel { background: #f1f5f9; color: #64748b; }
+        .shift-popover .popover-btn-cancel:hover { background: #e2e8f0; }
+        .shift-popover .popover-btn-confirm { background: #6366f1; color: white; }
+        .shift-popover .popover-btn-confirm:hover { background: #4f46e5; }
+
         /* 排班表格 */
         .schedule-table-wrapper {
             overflow-x: auto; border-radius: 16px; background: white;
@@ -226,7 +271,7 @@
 
         .shift-tag {
             display: inline-block; padding: 5px 14px; border-radius: 40px;
-            font-size: 0.92rem; font-weight: 600; min-width: 50px;
+            font-size: 0.92rem; font-weight: 600; min-width: 50px; cursor: pointer;
         }
         .shift-tag.shift-A班 { background: #bbdefb; color: #1565c0; }
         .shift-tag.shift-B班 { background: #b2dfdb; color: #00695c; }
@@ -242,6 +287,13 @@
         .emp-info { display: flex; flex-direction: column; align-items: center; gap: 3px; }
         .emp-name { font-weight: 600; font-size: 0.92rem; color: #1e293b; }
         .emp-team { font-weight: 600; font-size: 0.92rem; color: #1e293b; }
+        td.team-bg-在线组 { background-color: #e8f5e9; }
+        td.team-bg-热线组 { background-color: #e3f2fd; }
+        td.team-bg-售后组 { background-color: #fff3e0; }
+        td.team-bg-综合组 { background-color: #f3e5f5; }
+        td.team-bg-VIP组 { background-color: #fce4ec; }
+        td.team-bg-质检组 { background-color: #fff8e1; }
+        td.team-bg-支持组 { background-color: #e0f2f1; }
         .supervisor-icon { cursor: default; }
         .sort-icons {
             display: inline-flex; flex-direction: column; line-height: 0.9;
@@ -351,7 +403,7 @@
         <h1>排班表</h1>
         <div class="header-right">
             <div class="view-toggle">
-                <button class="view-btn" data-view="day">今日</button>
+                <button class="view-btn" data-view="day">日视图</button>
                 <button class="view-btn active" data-view="week">周视图</button>
                 <button class="view-btn" data-view="month">月视图</button>
             </div>
@@ -536,6 +588,14 @@
 
 <div id="toastMsg" class="toast-msg" style="display: none;"></div>
 <div id="shiftTooltip" class="shift-tooltip" style="display:none;"></div>
+<div id="shiftPopover" class="shift-popover" style="display:none;">
+    <div class="popover-title">修改本日排班</div>
+    <div class="popover-body" id="popoverShiftOptions"></div>
+    <div class="popover-actions">
+        <button class="popover-btn popover-btn-cancel" id="popoverCancel">取消</button>
+        <button class="popover-btn popover-btn-confirm" id="popoverConfirm">确认</button>
+    </div>
+</div>
 
 <script>
     // ========== 数据层（后端 API） ==========
@@ -560,8 +620,8 @@
         const data = await apiGet('/shifts');
         shiftDataMap = {};
         data.forEach(s => { shiftDataMap[s.name] = s; });
-        const workShifts = data.map(s => s.name);
-        const shiftOptions = [...workShifts, "休息", "请假"];
+        const workShifts = data.map(s => s.name).filter(s => s !== "休息" && s !== "请假" && s !== "放休");
+        const shiftOptions = [...workShifts, "休息", "放休", "请假"];
         return { shiftOptions, workShifts };
     }
     async function loadEmployeesFromAPI(statusFilter) {
@@ -623,23 +683,6 @@
         );
     }
 
-    function initDemoData() {
-        scheduleMap.clear();
-        const today = new Date();
-        const startDemo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7);
-        const endDemo = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate() + 7);
-        let cur = new Date(startDemo);
-        const names = getEmployeeNames();
-        while(cur <= endDemo) {
-            const dateStr = formatDate(cur);
-            names.forEach(emp => {
-                const rand = Math.floor(Math.random() * shiftOptions.length);
-                scheduleMap.set(`${dateStr}|${emp}`, shiftOptions[rand]);
-            });
-            cur.setDate(cur.getDate() + 1);
-        }
-    }
-
     function getShift(date, emp) {
         return scheduleMap.get(`${date}|${emp}`) || "未排班";
     }
@@ -698,16 +741,22 @@
 
             let res = await fetch(API_BASE + '/schedules/import-matrix', { method: 'POST', body: formData });
             let data = await safeJson(res);
+            const matrixError = !res.ok ? (data.error || '') : '';
+            let usedFallback = false;
             if (!res.ok) {
                 if (data.error && data.error.includes("未识别到日期列")) {
                     const formData2 = new FormData();
                     formData2.append('file', file);
                     res = await fetch(API_BASE + '/schedules/import', { method: 'POST', body: formData2 });
                     data = await safeJson(res);
+                    usedFallback = true;
                 }
             }
             if (!res.ok) {
-                showToast(data.error || '导入失败，请检查文件格式');
+                const msg = usedFallback
+                    ? `矩阵导入失败：${matrixError}；列表导入也失败：${data.error || '未知错误'}`
+                    : (data.error || '导入失败，请检查文件格式');
+                showToast(msg);
                 return;
             }
 
@@ -1004,8 +1053,8 @@
             <table class="schedule-table">
                 <thead>
                     <tr>
-                        <th style="min-width:90px;" rowspan="2">员工</th>
                         <th style="min-width:90px;cursor:pointer;" rowspan="2" id="teamHeaderSort">团队<span class="sort-icons" id="sortIcons"><span class="sort-asc">▲</span><span class="sort-desc">▼</span></span></th>
+                        <th style="min-width:90px;" rowspan="2">员工</th>
                         ${days.map(d => `<th>${d.date}</th>`).join('')}
                     </tr>
                     <tr class="weekday-row">
@@ -1015,8 +1064,8 @@
                 <tbody>
                     ${filtered.map(emp => `
                         <tr>
-                            <td style="background:#fafcff;"><div class="emp-info"><span class="emp-name">${emp.name}${emp.position==='主管'?' <span class="supervisor-icon" title="主管">👑</span>':''}</span></div></td>
-                            <td style="background:#fafcff;"><div class="emp-info"><span class="emp-team">${emp.team}</span></div></td>
+                            <td class="team-bg-${emp.team}"><div class="emp-info"><span class="emp-team">${emp.team}</span></div></td>
+                            <td><div class="emp-info"><span class="emp-name" data-employee="${emp.name}">${emp.name}${emp.position==='主管'?' <span class="supervisor-icon" title="主管">👑</span>':''}</span></div></td>
                             ${days.map(d => {
                                 let shiftVal = getShift(d.date, emp.name);
                                 let cls = getShiftClass(shiftVal);
@@ -1109,6 +1158,63 @@
             if (!tag) return;
             tooltip.style.display = "none";
         });
+    }
+
+    let popoverTarget = null; // { date, employeeName }
+
+    function showShiftPopover(tagEl, date, employeeName, currentShift) {
+        const popover = document.getElementById("shiftPopover");
+        const optionsContainer = document.getElementById("popoverShiftOptions");
+        popoverTarget = { date, employeeName };
+
+        const optClass = (s) => {
+            const map = { "A班":"opt-A班","B班":"opt-B班","C班":"opt-C班","T班":"opt-T班","E班":"opt-E班","F班":"opt-F班","休息":"opt-休息","放休":"opt-放休","请假":"opt-请假" };
+            return map[s] || "";
+        };
+
+        optionsContainer.innerHTML = shiftOptions.map(s =>
+            `<span class="popover-shift-option ${optClass(s)}${s === currentShift ? ' selected' : ''}" data-shift="${s}">${s}</span>`
+        ).join('');
+
+        // 点击选项切换选中
+        optionsContainer.querySelectorAll('.popover-shift-option').forEach(opt => {
+            opt.addEventListener('click', () => {
+                optionsContainer.querySelectorAll('.popover-shift-option').forEach(o => o.classList.remove('selected'));
+                opt.classList.add('selected');
+            });
+        });
+
+        // 定位气泡窗
+        const rect = tagEl.getBoundingClientRect();
+        let left = rect.left + rect.width / 2 - 150;
+        let top = rect.bottom + 8;
+        if (left < 8) left = 8;
+        if (left + 300 > window.innerWidth - 8) left = window.innerWidth - 308;
+        if (top + 220 > window.innerHeight) top = rect.top - 220;
+        popover.style.left = left + "px";
+        popover.style.top = top + "px";
+        popover.style.display = "block";
+    }
+
+    function hideShiftPopover() {
+        document.getElementById("shiftPopover").style.display = "none";
+        popoverTarget = null;
+    }
+
+    async function confirmShiftPopover() {
+        if (!popoverTarget) return;
+        const selected = document.querySelector("#popoverShiftOptions .popover-shift-option.selected");
+        if (!selected) { hideShiftPopover(); return; }
+        const newShift = selected.getAttribute("data-shift");
+        try {
+            await apiPost('/schedules/batch', { entries: [{ date: popoverTarget.date, employee: popoverTarget.employeeName, shift: newShift }] });
+            setShift(popoverTarget.date, popoverTarget.employeeName, newShift);
+            renderCurrentView();
+            showToast(`${popoverTarget.employeeName} ${popoverTarget.date} → ${newShift}`);
+        } catch(e) {
+            showToast(e.message);
+        }
+        hideShiftPopover();
     }
 
     function openEditModal() {
@@ -1227,14 +1333,60 @@
         filterSelectedTeams = [...getTeamOptions()];
         initAllMultiSelects();
         setupTooltip();
+
+        // 支持 URL 参数: ?date=2026-05-15&view=day
+        const params = new URLSearchParams(window.location.search);
+        const paramDate = params.get("date");
+        const paramView = params.get("view");
+        if (paramDate && paramDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            currentBaseDate = parseDate(paramDate);
+        }
+        if (paramView && ["day","week","month"].includes(paramView)) {
+            currentView = paramView;
+            document.querySelectorAll('.view-btn').forEach(b => {
+                b.classList.toggle('active', b.getAttribute('data-view') === paramView);
+            });
+        }
+
         renderCurrentView();
 
-        // 团队排序点击（事件委托）
+        // 团队排序点击 / 班次标签点击（事件委托）
         document.getElementById("scheduleViewContainer").addEventListener("click", (e) => {
             const header = e.target.closest("#teamHeaderSort");
-            if (!header) return;
-            teamSortState = (teamSortState + 1) % 3;
-            renderCurrentView();
+            if (header) {
+                teamSortState = (teamSortState + 1) % 3;
+                renderCurrentView();
+                return;
+            }
+            const tag = e.target.closest(".shift-tag");
+            if (!tag) return;
+            const cell = tag.closest("td");
+            const row = tag.closest("tr");
+            const cells = [...row.children];
+            const colIndex = cells.indexOf(cell);
+            const empNameEl = cells[1]?.querySelector(".emp-name");
+            if (!empNameEl) return;
+            const employeeName = empNameEl.getAttribute("data-employee") || empNameEl.textContent.trim();
+            const table = tag.closest("table");
+            const headerCells = table.querySelectorAll("thead tr:first-child th");
+            const dateHeader = headerCells[colIndex];
+            const date = dateHeader ? dateHeader.textContent.trim() : null;
+            if (!date || !employeeName) return;
+            const currentShift = tag.getAttribute("data-shift");
+            showShiftPopover(tag, date, employeeName, currentShift);
+        });
+
+        // 气泡窗按钮
+        document.getElementById("popoverCancel").addEventListener("click", hideShiftPopover);
+        document.getElementById("popoverConfirm").addEventListener("click", confirmShiftPopover);
+
+        // 点击气泡窗外关闭
+        document.addEventListener("click", (e) => {
+            const popover = document.getElementById("shiftPopover");
+            if (popover.style.display !== "block") return;
+            if (!popover.contains(e.target) && !e.target.closest(".shift-tag")) {
+                hideShiftPopover();
+            }
         });
 
         document.querySelectorAll('.view-btn').forEach(btn => {
