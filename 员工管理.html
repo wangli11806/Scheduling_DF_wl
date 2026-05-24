@@ -289,40 +289,33 @@
 <div id="toastMsg" class="toast-msg" style="display: none;"></div>
 
 <script>
-    // ========== 数据层（localStorage 共享） ==========
-    const STORAGE_KEY = 'schedule_employees';
+    // ========== 数据层（后端 API） ==========
+    const API_BASE = '/api';
     const teamOptions = ["在线组", "热线组", "售后组", "主管", "综合组"];
     const positionOptions = ["客服", "主管"];
 
-    function loadEmployees() {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if(stored) {
-            return JSON.parse(stored);
-        }
-        const defaults = [
-            { id: "EMP001", name: "张三", team: "在线组", position: "客服", supervisor: "陈敏", entryDate: "2024-03-15" },
-            { id: "EMP002", name: "李四", team: "热线组", position: "客服", supervisor: "陈敏", entryDate: "2024-06-01" },
-            { id: "EMP003", name: "王芳", team: "售后组", position: "客服", supervisor: "陈敏", entryDate: "2024-08-20" },
-            { id: "EMP004", name: "赵磊", team: "在线组", position: "客服", supervisor: "陈敏", entryDate: "2025-01-10" },
-            { id: "EMP005", name: "陈敏", team: "主管",   position: "主管", supervisor: "",    entryDate: "2023-05-08" }
-        ];
-        saveEmployees(defaults);
-        return defaults;
+    async function apiGet(url) {
+        const res = await fetch(API_BASE + url);
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '请求失败'); }
+        return res.json();
+    }
+    async function apiPost(url, data) {
+        const res = await fetch(API_BASE + url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
+    }
+    async function apiPut(url, data) {
+        const res = await fetch(API_BASE + url, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
+    }
+    async function apiDelete(url) {
+        const res = await fetch(API_BASE + url, { method:'DELETE' });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
     }
 
-    function saveEmployees(data) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    }
-
-    let employees = loadEmployees();
-    let nextEmpId = Math.max(...employees.map(e => parseInt(e.id.replace('EMP','')) || 0), 0) + 1;
-
-    function generateEmpId() {
-        const id = `EMP${String(nextEmpId).padStart(3, '0')}`;
-        nextEmpId++;
-        return id;
-    }
-
+    let employees = [];
     let filterName = '';
     let filterTeam = '';
 
@@ -335,6 +328,10 @@
     }
 
     function getEmployeeNames() { return employees.map(e => e.name); }
+
+    async function loadEmployees() {
+        employees = await apiGet('/employees');
+    }
 
     // ========== 渲染 ==========
     function renderTeamFilter() {
@@ -422,7 +419,7 @@
         document.getElementById("employeeModal").classList.remove("active");
     }
 
-    function saveEmployee() {
+    async function saveEmployee() {
         const name = document.getElementById("modalName").value.trim();
         const team = document.getElementById("modalTeam").value;
         const position = document.getElementById("modalPosition").value;
@@ -434,34 +431,20 @@
         if(!position) { showToast("请选择岗位"); return; }
         if(!entryDate) { showToast("请选择入职时间"); return; }
 
-        const duplicate = employees.find(e => e.name === name && e.id !== editingEmpId);
-        if(duplicate) { showToast(`员工"${name}"已存在`); return; }
-
-        if(editingEmpId) {
-            const emp = employees.find(e => e.id === editingEmpId);
-            if(emp) {
-                const oldName = emp.name;
-                emp.name = name;
-                emp.team = team;
-                emp.position = position;
-                emp.supervisor = supervisor;
-                emp.entryDate = entryDate;
-                if(oldName !== name) {
-                    employees.forEach(e => { if(e.supervisor === oldName) e.supervisor = name; });
-                }
+        try {
+            if(editingEmpId) {
+                await apiPut('/employees/' + editingEmpId, { name, team, position, supervisor, entryDate });
+                showToast("员工信息已更新");
+            } else {
+                await apiPost('/employees', { name, team, position, supervisor, entryDate });
+                showToast("员工已创建");
             }
-            showToast("员工信息已更新");
-        } else {
-            employees.push({
-                id: generateEmpId(),
-                name, team, position, supervisor, entryDate
-            });
-            showToast("员工已创建");
+            closeEmployeeModal();
+            await loadEmployees();
+            refreshAll();
+        } catch(e) {
+            showToast(e.message);
         }
-
-        saveEmployees();
-        closeEmployeeModal();
-        refreshAll();
     }
 
     // 删除
@@ -479,7 +462,7 @@
         deleteTargetId = null;
     }
 
-    function confirmDelete() {
+    async function confirmDelete() {
         if(!deleteTargetId) return;
         const emp = employees.find(e => e.id === deleteTargetId);
         if(emp) {
@@ -490,11 +473,15 @@
                 return;
             }
         }
-        employees = employees.filter(e => e.id !== deleteTargetId);
-        saveEmployees();
-        closeDeleteModal();
-        refreshAll();
-        showToast("员工已删除");
+        try {
+            await apiDelete('/employees/' + deleteTargetId);
+            await loadEmployees();
+            closeDeleteModal();
+            refreshAll();
+            showToast("员工已删除");
+        } catch(e) {
+            showToast(e.message);
+        }
     }
 
     function showToast(msg) {
@@ -505,7 +492,8 @@
     }
 
     // ========== 初始化 ==========
-    function init() {
+    async function init() {
+        await loadEmployees();
         refreshAll();
 
         document.getElementById("addEmployeeBtn").addEventListener("click", openAddModal);

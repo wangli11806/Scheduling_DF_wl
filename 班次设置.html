@@ -265,38 +265,43 @@
 <div id="toastMsg" class="toast-msg" style="display: none;"></div>
 
 <script>
-    // ========== 数据层（localStorage 共享） ==========
-    const STORAGE_KEY = 'schedule_shifts';
+    // ========== 数据层（后端 API） ==========
+    const API_BASE = '/api';
 
-    function loadShifts() {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if(stored) {
-            return JSON.parse(stored);
-        }
-        const defaults = [
-            { id: "SHF001", name: "A班", info: "早1班", startTime: "08:00", endTime: "17:00", lunchStart: "12:00", lunchEnd: "12:30", dinnerStart: "", dinnerEnd: "" },
-            { id: "SHF002", name: "B班", info: "常规班", startTime: "09:00", endTime: "18:00", lunchStart: "12:00", lunchEnd: "12:30", dinnerStart: "", dinnerEnd: "" },
-            { id: "SHF003", name: "C班", info: "早2班", startTime: "07:00", endTime: "16:00", lunchStart: "12:00", lunchEnd: "12:30", dinnerStart: "", dinnerEnd: "" },
-            { id: "SHF004", name: "D班", info: "晚1班", startTime: "14:00", endTime: "23:00", lunchStart: "", lunchEnd: "", dinnerStart: "18:00", dinnerEnd: "18:30" },
-            { id: "SHF005", name: "E班", info: "通宵班", startTime: "22:00", endTime: "08:00", lunchStart: "", lunchEnd: "", dinnerStart: "02:00", dinnerEnd: "02:30" }
-        ];
-        defaults.forEach(s => { s.workHours = calcWorkHours(s); });
-        saveShifts(defaults);
-        return defaults;
+    async function apiGet(url) {
+        const res = await fetch(API_BASE + url);
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '请求失败'); }
+        return res.json();
+    }
+    async function apiPost(url, data) {
+        const res = await fetch(API_BASE + url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
+    }
+    async function apiPut(url, data) {
+        const res = await fetch(API_BASE + url, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
+    }
+    async function apiDelete(url) {
+        const res = await fetch(API_BASE + url, { method:'DELETE' });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
     }
 
-    function saveShifts(data) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    async function loadShifts() {
+        const data = await apiGet('/shifts');
+        // 映射后端字段名到前端
+        return data.map(s => ({
+            id: s.id, name: s.name, info: s.info,
+            startTime: s.start_time, endTime: s.end_time,
+            lunchStart: s.lunch_start, lunchEnd: s.lunch_end,
+            dinnerStart: s.dinner_start, dinnerEnd: s.dinner_end,
+            workHours: s.work_hours
+        }));
     }
 
-    let shifts = loadShifts();
-    let nextShiftId = Math.max(...shifts.map(s => parseInt(s.id.replace('SHF','')) || 0), 0) + 1;
-
-    function generateShiftId() {
-        const id = `SHF${String(nextShiftId).padStart(3, '0')}`;
-        nextShiftId++;
-        return id;
-    }
+    let shifts = [];
 
     // ========== 工时计算 ==========
     function timeToMinutes(t) {
@@ -369,7 +374,8 @@
         });
     }
 
-    function refreshAll() {
+    async function refreshAll() {
+        shifts = await loadShifts();
         renderTable();
     }
 
@@ -410,7 +416,7 @@
         document.getElementById("shiftModal").classList.remove("active");
     }
 
-    function saveShift() {
+    async function saveShift() {
         const name = document.getElementById("modalName").value;
         const info = document.getElementById("modalInfo").value.trim();
         const startTime = document.getElementById("modalStartTime").value;
@@ -424,37 +430,20 @@
         if((lunchStart && !lunchEnd) || (!lunchStart && lunchEnd)) { showToast("午餐时段需同时填写起止时间，或都留空"); return; }
         if((dinnerStart && !dinnerEnd) || (!dinnerStart && dinnerEnd)) { showToast("晚餐时段需同时填写起止时间，或都留空"); return; }
 
-        const duplicate = shifts.find(s => s.name === name && s.id !== editingShiftId);
-        if(duplicate) { showToast(`班次"${name}"已存在`); return; }
-
-        if(editingShiftId) {
-            const s = shifts.find(sh => sh.id === editingShiftId);
-            if(s) {
-                s.name = name;
-                s.info = info;
-                s.startTime = startTime;
-                s.endTime = endTime;
-                s.lunchStart = lunchStart;
-                s.lunchEnd = lunchEnd;
-                s.dinnerStart = dinnerStart;
-                s.dinnerEnd = dinnerEnd;
-                s.workHours = calcWorkHours(s);
+        try {
+            const payload = { name, info, startTime, endTime, lunchStart, lunchEnd, dinnerStart, dinnerEnd };
+            if(editingShiftId) {
+                await apiPut('/shifts/' + editingShiftId, payload);
+                showToast("班次信息已更新");
+            } else {
+                await apiPost('/shifts', payload);
+                showToast("班次已创建");
             }
-            showToast("班次信息已更新");
-        } else {
-            const newShift = {
-                id: generateShiftId(),
-                name, info, startTime, endTime,
-                lunchStart, lunchEnd, dinnerStart, dinnerEnd
-            };
-            newShift.workHours = calcWorkHours(newShift);
-            shifts.push(newShift);
-            showToast("班次已创建");
+            closeShiftModal();
+            await refreshAll();
+        } catch(e) {
+            showToast(e.message);
         }
-
-        saveShifts();
-        closeShiftModal();
-        refreshAll();
     }
 
     // 删除
@@ -472,13 +461,16 @@
         deleteTargetId = null;
     }
 
-    function confirmDelete() {
+    async function confirmDelete() {
         if(!deleteTargetId) return;
-        shifts = shifts.filter(s => s.id !== deleteTargetId);
-        saveShifts();
-        closeDeleteModal();
-        refreshAll();
-        showToast("班次已删除");
+        try {
+            await apiDelete('/shifts/' + deleteTargetId);
+            closeDeleteModal();
+            await refreshAll();
+            showToast("班次已删除");
+        } catch(e) {
+            showToast(e.message);
+        }
     }
 
     function showToast(msg) {
@@ -489,8 +481,8 @@
     }
 
     // ========== 初始化 ==========
-    function init() {
-        refreshAll();
+    async function init() {
+        await refreshAll();
 
         document.getElementById("addShiftBtn").addEventListener("click", openAddModal);
 

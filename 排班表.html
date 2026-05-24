@@ -445,59 +445,50 @@
 <div id="toastMsg" class="toast-msg" style="display: none;"></div>
 
 <script>
-    // ========== 数据层 ==========
+    // ========== 数据层（后端 API） ==========
+    const API_BASE = '/api';
     let scheduleMap = new Map();
+    const weekDayNames = ["日", "一", "二", "三", "四", "五", "六"];
+
+    async function apiGet(url) {
+        const res = await fetch(API_BASE + url);
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '请求失败'); }
+        return res.json();
+    }
+    async function apiPost(url, data) {
+        const res = await fetch(API_BASE + url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
+    }
+
+    async function loadShiftOptions() {
+        const data = await apiGet('/shifts');
+        return [...data.map(s => s.name), "休息", "请假"];
+    }
+    async function loadWorkShifts() {
+        const data = await apiGet('/shifts');
+        return data.map(s => s.name);
+    }
+    async function loadEmployeesFromAPI() {
+        const data = await apiGet('/employees');
+        return data.map(e => ({ name: e.name, team: e.team }));
+    }
+    async function loadSchedules() {
+        const data = await apiGet('/schedules');
+        scheduleMap.clear();
+        data.forEach(r => {
+            scheduleMap.set(`${r.schedule_date}|${r.employee_name}`, r.shift_name);
+        });
+    }
+
+    let shiftOptions = [];
+    let workShifts = [];
+    let employees = [];
+
     function getTeamOptions() {
         const teams = [...new Set(employees.map(e => e.team))];
         return teams.length > 0 ? teams.sort() : ["综合组"];
     }
-    const SHIFT_STORAGE_KEY = 'schedule_shifts';
-    const weekDayNames = ["日", "一", "二", "三", "四", "五", "六"];
-
-    function loadShiftOptions() {
-        const stored = localStorage.getItem(SHIFT_STORAGE_KEY);
-        if(stored) {
-            const data = JSON.parse(stored);
-            return [...data.map(s => s.name), "休息", "请假"];
-        }
-        return ["A班", "B班", "C班", "休息", "请假"];
-    }
-
-    function loadWorkShifts() {
-        const stored = localStorage.getItem(SHIFT_STORAGE_KEY);
-        if(stored) {
-            return JSON.parse(stored).map(s => s.name);
-        }
-        return ["A班", "B班", "C班"];
-    }
-
-    let shiftOptions = loadShiftOptions();
-    let workShifts = loadWorkShifts();
-
-    const STORAGE_KEY = 'schedule_employees';
-
-    function loadEmployeesFromStorage() {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            const data = JSON.parse(stored);
-            return data.map(e => ({ name: e.name, team: e.team }));
-        }
-        const defaults = [
-            {name: "张三", team: "在线组"},
-            {name: "李四", team: "热线组"},
-            {name: "王芳", team: "售后组"},
-            {name: "赵磊", team: "在线组"},
-            {name: "陈敏", team: "主管"}
-        ];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults.map((e, i) => ({
-            id: `EMP${String(i + 1).padStart(3, '0')}`, name: e.name, team: e.team,
-            position: e.team === '主管' ? '主管' : '客服', supervisor: e.team === '主管' ? '' : '陈敏',
-            entryDate: '2024-01-01'
-        }))));
-        return defaults;
-    }
-
-    let employees = loadEmployeesFromStorage();
 
     let filterSelectedEmployees = getEmployeeNames();
     let filterSelectedTeams = [...getTeamOptions()];
@@ -555,21 +546,10 @@
     }
 
     function exportToExcel() {
-        let dataRows = [["日期", "员工", "所属团队", "班次"]];
-        let dateSet = new Set();
-        for(let key of scheduleMap.keys()) dateSet.add(key.split('|')[0]);
-        let sortedDates = Array.from(dateSet).sort();
-        const filtered = getFilteredEmployees();
-        for(let date of sortedDates) {
-            for(let emp of filtered) {
-                let shift = getShift(date, emp.name);
-                dataRows.push([date, emp.name, emp.team, shift]);
-            }
-        }
-        const ws = XLSX.utils.aoa_to_sheet(dataRows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "排班表");
-        XLSX.writeFile(wb, `排班数据_${formatDate(new Date())}.xlsx`);
+        const link = document.createElement('a');
+        link.href = API_BASE + '/schedules/export';
+        link.download = `排班数据_${formatDate(new Date())}.xlsx`;
+        link.click();
         showToast("导出完成");
     }
 
@@ -582,53 +562,23 @@
         showToast("模板已下载");
     }
 
-    function importExcel(file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(firstSheet, {header: 1, defval: ""});
-            if(!rows || rows.length < 2) { showToast("Excel至少包含两行数据"); return; }
-            let header = rows[0];
-            let dateIdx = -1, empIdx = -1, shiftIdx = -1;
-            for(let i=0; i<header.length; i++) {
-                let cell = String(header[i]).toLowerCase();
-                if(cell.includes("日期")) dateIdx = i;
-                else if(cell.includes("员工") || cell.includes("姓名")) empIdx = i;
-                else if(cell.includes("班次") || cell.includes("shift")) shiftIdx = i;
+    async function importExcel(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const res = await fetch(API_BASE + '/schedules/import', { method: 'POST', body: formData });
+            if (!res.ok) {
+                const e = await res.json();
+                showToast(e.error || '导入失败');
+                return;
             }
-            if(dateIdx === -1 || empIdx === -1 || shiftIdx === -1) {
-                showToast("Excel需包含【日期,员工,班次】三列"); return;
-            }
-            let updated = 0;
-            const names = getEmployeeNames();
-            for(let i=1; i<rows.length; i++) {
-                let row = rows[i];
-                if(!row || row.length < Math.max(dateIdx, empIdx, shiftIdx)+1) continue;
-                let rawDate = row[dateIdx];
-                let employee = row[empIdx] ? String(row[empIdx]).trim() : "";
-                let shift = row[shiftIdx] ? String(row[shiftIdx]).trim() : "";
-                if(!rawDate || !employee || !shift) continue;
-                let dateObj = new Date(rawDate);
-                if(isNaN(dateObj.getTime())) {
-                    let parts = String(rawDate).split('-');
-                    if(parts.length===3) dateObj = new Date(parts[0], parts[1]-1, parts[2]);
-                    if(isNaN(dateObj.getTime())) continue;
-                }
-                const dateStr = formatDate(dateObj);
-                if(!names.includes(employee)) {
-                    employees.push({name: employee, team: "综合组"});
-                    names.push(employee);
-                    rebuildAllPageFilters();
-                }
-                setShift(dateStr, employee, shift);
-                updated++;
-            }
-            showToast(`成功导入并更新 ${updated} 条排班记录`);
+            const result = await res.json();
+            await loadSchedules();
             renderCurrentView();
-        };
-        reader.readAsArrayBuffer(file);
+            showToast(`成功导入并更新 ${result.updated} 条排班记录`);
+        } catch(e) {
+            showToast('导入失败: ' + e.message);
+        }
     }
 
     // ========== 多选下拉组件 ==========
@@ -917,28 +867,33 @@
         ).join('');
     }
 
-    function saveModalEdit() {
+    async function saveModalEdit() {
         if(modalSelectedEmployees.length === 0) { showToast("请选择至少一名员工"); return; }
         const startDate = document.getElementById("modalStartDate").value;
         const endDate = document.getElementById("modalEndDate").value;
         const shiftRadio = document.querySelector('input[name="modalShift"]:checked');
         if(!startDate || !endDate) { showToast("请选择日期区间"); return; }
         if(startDate > endDate) { showToast("起始日期不能晚于结束日期"); return; }
-        const shift = shiftRadio ? shiftRadio.value : "A班";
+        const shift = shiftRadio ? shiftRadio.value : shiftOptions[0];
 
         let cur = parseDate(startDate);
         const end = parseDate(endDate);
-        let totalCount = 0;
+        const entries = [];
         while(cur <= end) {
             const dStr = formatDate(cur);
             modalSelectedEmployees.forEach(emp => {
+                entries.push({ date: dStr, employee: emp, shift });
                 setShift(dStr, emp, shift);
-                totalCount++;
             });
             cur.setDate(cur.getDate() + 1);
         }
-        renderCurrentView();
-        showToast(`已为 ${modalSelectedEmployees.length} 名员工更新 ${totalCount} 条排班记录为 ${shift}`);
+        try {
+            await apiPost('/schedules/batch', { entries });
+            renderCurrentView();
+            showToast(`已为 ${modalSelectedEmployees.length} 名员工更新 ${entries.length} 条排班记录为 ${shift}`);
+        } catch(e) {
+            showToast(e.message);
+        }
         closeEditModal();
     }
 
@@ -957,13 +912,14 @@
         setTimeout(() => { toast.style.display = "none"; }, 2500);
     }
 
-    function resetFilter() {
+    async function resetFilter() {
         filterSelectedEmployees = getEmployeeNames();
         filterSelectedTeams = [...getTeamOptions()];
         msPageEmployee.renderTrigger();
         msPageEmployee.renderDropdown();
         msPageTeam.renderTrigger();
         msPageTeam.renderDropdown();
+        renderCurrentView();
         showToast("筛选条件已重置");
     }
 
@@ -979,8 +935,19 @@
         renderCurrentView();
     }
 
-    function init() {
-        initDemoData();
+    async function init() {
+        try {
+            [employees, shiftOptions, workShifts] = await Promise.all([
+                loadEmployeesFromAPI(),
+                loadShiftOptions(),
+                loadWorkShifts()
+            ]);
+            await loadSchedules();
+        } catch(e) {
+            showToast('数据加载失败: ' + e.message);
+        }
+        filterSelectedEmployees = getEmployeeNames();
+        filterSelectedTeams = [...getTeamOptions()];
         initAllMultiSelects();
         renderCurrentView();
 

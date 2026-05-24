@@ -1,7 +1,38 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c \"print\\('hello'\\)\")"
+      "Bash(python -c \"print\\('hello'\\)\")",
+      "Bash(python3 -c \"import flask; print\\('flask:', flask.__version__\\)\")",
+      "Bash(python3 -c \"import openpyxl; print\\('openpyxl:', openpyxl.__version__\\)\")",
+      "Bash(pip --version)",
+      "Bash(pip list *)",
+      "Bash(cmd //c \"python --version && pip list 2>nul | findstr -i flask openpyxl\")",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/wangli/AppData/Local/Programs/**)",
+      "Bash(winget install *)",
+      "Bash(ls \"/c/Users/wangli/AppData/Local/Programs/Python/\" 2>/dev/null; ls \"/c/Program Files/Python312/\" 2>/dev/null; ls \"/c/Program Files/Python313/\" 2>/dev/null; ls \"/c/Program Files \\(x86\\)/Python\"* 2>/dev/null)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Bash(where python *)",
+      "Bash(where python3 *)",
+      "Read(//c/Users/wangli/AppData/Local/Microsoft/WindowsApps/**)",
+      "Bash(cmd //c \"dir /s /b C:\\\\python.exe 2>nul & dir /s /b C:\\\\Users\\\\wangli\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\python.exe 2>nul\")",
+      "Bash(cmd //c \"dir /s /b C:\\\\Python312\\\\python.exe 2>nul\")",
+      "Bash(cmd //c \"dir /s /b C:\\\\Program Files\\\\Python312\\\\python.exe 2>nul\")",
+      "Bash(cmd //c \"dir /s /b C:\\\\Python3*\\\\python.exe 2>nul\")",
+      "Bash(reg query *)",
+      "Bash(cmd //c \"reg query HKLM\\\\SOFTWARE\\\\Python\\\\PythonCore\\\\3.12 /v InstallPath 2>nul\")",
+      "Bash(cmd //c \"reg query HKLM\\\\SOFTWARE\\\\Python\\\\PythonCore 2>nul & reg query HKCU\\\\SOFTWARE\\\\Python\\\\PythonCore 2>nul\")",
+      "Bash(cmd //c \"winget list Python.Python.3.12 2>nul\")",
+      "Bash(ls -la \"/d/Python\"*)",
+      "Read(//d//**)",
+      "Bash(cmd //c \"dir /s /b D:\\\\python.exe 2>nul\")",
+      "Bash(cmd //c \"D:\\\\python.exe --version 2>&1 && dir /s /b D:\\\\pip.exe 2>nul && dir /s /b D:\\\\Scripts\\\\pip.exe 2>nul && dir /s /b D:\\\\Lib 2>nul | head -3\")",
+      "Bash(cmd //c \"dir /s /b D:\\\\pip* 2>nul\")",
+      "Bash(cmd //c \"D:\\\\python.exe -m pip --version 2>&1\")",
+      "Bash(\"D:/Scripts/pip.exe\" install *)",
+      "Bash(cmd //c \"D:\\\\python.exe -c \\\\\"import sys; print\\([p for p in sys.path if 'Lib' in p]\\)\\\\\" 2>&1\")",
+      "Bash(cmd //c \"D:\\\\python.exe -c \\\\\"import sys; sys.path.insert\\(0, 'D:\\\\\\\\\\\\\\\\Lib\\\\\\\\\\\\\\\\site-packages'\\); import pip; print\\('ok'\\)\\\\\" 2>&1\")",
+      "Bash(cmd //c 'D:\\\\python.exe -c \"import sys; print\\([p for p in sys.path]\\)\"')"
     ]
   }
 }
