@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(start \"\" \"d:\\\\Gitee项目\\\\排班系统\\\\排班系统.html\")"
+      "Bash(start \"\" \"d:\\\\Gitee项目\\\\排班系统\\\\排班系统.html\")",
+      "Bash(python -m http.server 8080)",
+      "Bash(start http://localhost:8080/员工管理.html)",
+      "Bash(python -m http.server 3000)",
+      "Bash(start http://localhost:3000/员工管理.html)",
+      "Bash(where node *)",
+      "Bash(npx --version)",
+      "Bash(start \"\" \"d:\\\\Gitee项目\\\\排班系统\\\\班次设置.html\")"
     ]
   }
 }

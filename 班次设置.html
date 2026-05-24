@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>客服排班系统 - 班次设置</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        body {
+            background: #f1f5f9; margin: 0; padding: 0;
+            display: flex; min-height: 100vh;
+            font-size: 13px; color: #1e293b;
+        }
+
+        /* ===== 左侧菜单栏 ===== */
+        .sidebar {
+            width: 190px; min-width: 190px; background: #1e293b; color: #e2e8f0;
+            display: flex; flex-direction: column;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+            position: sticky; top: 0; height: 100vh; overflow-y: auto;
+        }
+        .sidebar-logo {
+            padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
+            font-size: 1.15rem; font-weight: 700; color: white; letter-spacing: 0.5px;
+        }
+        .sidebar-nav { padding: 8px 0; flex: 1; }
+        .sidebar-nav .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 13px 18px; margin: 3px 10px; border-radius: 10px;
+            font-size: 1rem; cursor: pointer; transition: all 0.15s;
+            color: #cbd5e1; text-decoration: none; user-select: none;
+        }
+        .sidebar-nav .nav-item:hover { background: rgba(255,255,255,0.06); color: white; }
+        .sidebar-nav .nav-item.active {
+            background: rgba(99, 102, 241, 0.25); color: #a5b4fc; font-weight: 600;
+        }
+
+        /* ===== 主内容区 ===== */
+        .main-area {
+            flex: 1; display: flex; flex-direction: column; min-width: 0;
+        }
+        .header-bar {
+            background: white; padding: 14px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            border-bottom: 1px solid #e8ecf1;
+        }
+        .header-bar h1 {
+            font-size: 1.15rem; font-weight: 700; color: #1e293b; margin: 0; white-space: nowrap;
+        }
+        .content-body { flex: 1; padding: 20px 28px; overflow-x: hidden; }
+
+        /* 操作栏 */
+        .action-bar {
+            display: flex; gap: 12px; margin-bottom: 16px; align-items: center;
+        }
+
+        /* 按钮 */
+        .btn {
+            background: white; border: 1px solid #cbd5e1; padding: 7px 18px;
+            border-radius: 40px; font-weight: 500; font-size: 0.92rem; cursor: pointer;
+            transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px;
+            color: #1e293b; white-space: nowrap;
+        }
+        .btn:hover { background: #f8fafc; border-color: #94a3b8; }
+        .btn-primary { background: #2c3e66; border-color: #2c3e66; color: white; }
+        .btn-primary:hover { background: #1e2f4a; }
+        .btn-danger { background: #ef4444; border-color: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-sm { padding: 5px 12px; font-size: 0.85rem; }
+
+        /* 表格 */
+        .table-wrapper {
+            overflow-x: auto; border-radius: 16px; background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid #edf2f7;
+        }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; min-width: 900px; }
+        .data-table th {
+            background: #f9fbfd; padding: 12px 10px; border-bottom: 1px solid #e2e8f0;
+            font-weight: 700; color: #2c3e66; text-align: left; white-space: nowrap;
+        }
+        .data-table td {
+            border-bottom: 1px solid #f1f5f9; padding: 11px 10px;
+            vertical-align: middle; color: #334155;
+        }
+        .data-table tbody tr:hover { background: #fafcff; }
+        .data-table .actions-cell { display: flex; gap: 8px; }
+        .empty-row td { text-align: center; padding: 40px; color: #94a3b8; }
+
+        .shift-name-badge {
+            display: inline-block; padding: 3px 10px; border-radius: 6px;
+            font-size: 0.85rem; font-weight: 600; background: #c8e6c9; color: #2e7d32;
+        }
+        .time-muted { color: #94a3b8; font-size: 0.85rem; }
+
+        /* 弹窗 */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.45); z-index: 900;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-dialog {
+            background: white; border-radius: 24px; padding: 32px; width: 520px; max-width: 92vw;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+        .modal-title { font-size: 1.15rem; font-weight: 600; color: #1e293b; margin-bottom: 24px; }
+        .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+        .modal-row label { font-size: 0.92rem; font-weight: 500; color: #475569; }
+        .modal-row input, .modal-row select {
+            padding: 10px 14px; border-radius: 16px; border: 1px solid #cbd5e1;
+            background: white; font-size: 0.92rem; width: 100%;
+        }
+        .modal-row .required::after { content: " *"; color: #ef4444; }
+        .modal-row-inline {
+            display: flex; gap: 12px; align-items: flex-start;
+        }
+        .modal-row-inline .modal-row { flex: 1; }
+        .time-range-group {
+            display: flex; align-items: center; gap: 0;
+            border: 1px solid #cbd5e1; border-radius: 16px; overflow: hidden;
+        }
+        .time-range-group input {
+            border: none !important; border-radius: 0 !important; padding: 10px 8px;
+            font-size: 0.92rem; outline: none; flex: 1; min-width: 0;
+        }
+        .time-range-group .tr-sep {
+            padding: 0 2px; color: #94a3b8; font-size: 0.92rem;
+            background: #f8fafc; line-height: 38px; user-select: none;
+        }
+        .modal-hint { font-size: 0.85rem; color: #94a3b8; margin-top: 2px; }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+
+        .toast-msg {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: #1e293b; color: white; padding: 10px 24px; border-radius: 60px;
+            font-size: 0.92rem; z-index: 1000; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+            transition: 0.2s; pointer-events: none;
+        }
+
+        @media (max-width: 860px) {
+            body { flex-direction: column; }
+            .sidebar {
+                width: 100%; min-width: auto; height: auto; position: relative;
+                flex-direction: row; flex-wrap: wrap; padding: 10px 14px; gap: 6px; align-items: center;
+            }
+            .sidebar-logo { padding: 0; border-bottom: none; }
+            .sidebar-nav { display: flex; padding: 0; gap: 4px; }
+            .sidebar-nav .nav-item { margin: 0; padding: 8px 12px; }
+            .header-bar { flex-direction: column; align-items: flex-start; }
+            .content-body { padding: 14px 12px; }
+            .modal-dialog { width: 96vw; padding: 24px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- 左侧菜单栏 -->
+<aside class="sidebar">
+    <div class="sidebar-logo">客服排班系统</div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" data-page="schedule" href="排班表.html">排班表</a>
+        <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
+        <a class="nav-item active" data-page="shifts" href="班次设置.html">班次设置</a>
+        <a class="nav-item" data-page="stats">排班统计</a>
+    </nav>
+</aside>
+
+<!-- 主内容区 -->
+<div class="main-area">
+
+    <div class="header-bar">
+        <h1>班次设置</h1>
+    </div>
+
+    <div class="content-body">
+
+        <!-- 操作栏 -->
+        <div class="action-bar">
+            <button class="btn btn-primary" id="addShiftBtn">新增班次</button>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="text-align:center;">班次ID</th>
+                        <th>班次</th>
+                        <th>信息</th>
+                        <th>上班时间</th>
+                        <th>下班时间</th>
+                        <th>午餐时段</th>
+                        <th>晚餐时段</th>
+                        <th>工作时长</th>
+                        <th style="text-align:center; min-width:120px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        <div style="text-align:right; margin-top:8px;">
+            <span class="info-text" id="tableInfo" style="font-size:0.85rem; color:#94a3b8;">共 0 个班次</span>
+        </div>
+    </div>
+</div>
+
+<!-- 新增/编辑班次弹窗 -->
+<div class="modal-overlay" id="shiftModal">
+    <div class="modal-dialog">
+        <div class="modal-title" id="modalTitle">新增班次</div>
+        <div class="modal-row">
+            <label class="required">班次名称</label>
+            <input type="text" id="modalName" placeholder="请输入班次名称，如：A班、B班">
+        </div>
+        <div class="modal-row">
+            <label>班次信息</label>
+            <input type="text" id="modalInfo" placeholder="如：早1班、常规班、晚班等">
+        </div>
+        <div class="modal-row">
+            <label>上班时间</label>
+            <input type="time" id="modalStartTime">
+        </div>
+        <div class="modal-row">
+            <label>下班时间</label>
+            <input type="time" id="modalEndTime">
+        </div>
+        <div class="modal-row">
+            <label>午餐时段 <span style="font-weight:400;color:#94a3b8;">（可留空）</span></label>
+            <div class="time-range-group">
+                <input type="time" id="modalLunchStart">
+                <span class="tr-sep">至</span>
+                <input type="time" id="modalLunchEnd">
+            </div>
+        </div>
+        <div class="modal-row">
+            <label>晚餐时段 <span style="font-weight:400;color:#94a3b8;">（可留空）</span></label>
+            <div class="time-range-group">
+                <input type="time" id="modalDinnerStart">
+                <span class="tr-sep">至</span>
+                <input type="time" id="modalDinnerEnd">
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" id="modalCancelBtn">取消</button>
+            <button class="btn btn-primary" id="modalSaveBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认弹窗 -->
+<div class="modal-overlay" id="deleteModal">
+    <div class="modal-dialog" style="text-align:center;">
+        <div class="modal-title">确认删除</div>
+        <p style="font-size:0.92rem; color:#64748b; margin-bottom:8px;">确定要删除班次 <strong id="deleteShiftName"></strong> 吗？</p>
+        <p style="font-size:0.85rem; color:#94a3b8;">此操作不可撤销</p>
+        <div class="modal-actions" style="justify-content:center;">
+            <button class="btn btn-outline" id="deleteCancelBtn">取消</button>
+            <button class="btn btn-danger" id="deleteConfirmBtn">确认删除</button>
+        </div>
+    </div>
+</div>
+
+<div id="toastMsg" class="toast-msg" style="display: none;"></div>
+
+<script>
+    // ========== 数据层（localStorage 共享） ==========
+    const STORAGE_KEY = 'schedule_shifts';
+
+    function loadShifts() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if(stored) {
+            return JSON.parse(stored);
+        }
+        const defaults = [
+            { id: "SHF001", name: "A班", info: "早1班", startTime: "08:00", endTime: "17:00", lunchStart: "12:00", lunchEnd: "12:30", dinnerStart: "", dinnerEnd: "" },
+            { id: "SHF002", name: "B班", info: "常规班", startTime: "09:00", endTime: "18:00", lunchStart: "12:00", lunchEnd: "12:30", dinnerStart: "", dinnerEnd: "" },
+            { id: "SHF003", name: "C班", info: "早2班", startTime: "07:00", endTime: "16:00", lunchStart: "12:00", lunchEnd: "12:30", dinnerStart: "", dinnerEnd: "" },
+            { id: "SHF004", name: "D班", info: "晚1班", startTime: "14:00", endTime: "23:00", lunchStart: "", lunchEnd: "", dinnerStart: "18:00", dinnerEnd: "18:30" },
+            { id: "SHF005", name: "E班", info: "通宵班", startTime: "22:00", endTime: "08:00", lunchStart: "", lunchEnd: "", dinnerStart: "02:00", dinnerEnd: "02:30" }
+        ];
+        defaults.forEach(s => { s.workHours = calcWorkHours(s); });
+        saveShifts(defaults);
+        return defaults;
+    }
+
+    function saveShifts(data) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+
+    let shifts = loadShifts();
+    let nextShiftId = Math.max(...shifts.map(s => parseInt(s.id.replace('SHF','')) || 0), 0) + 1;
+
+    function generateShiftId() {
+        const id = `SHF${String(nextShiftId).padStart(3, '0')}`;
+        nextShiftId++;
+        return id;
+    }
+
+    // ========== 工时计算 ==========
+    function timeToMinutes(t) {
+        if(!t) return null;
+        const [h, m] = t.split(':').map(Number);
+        return h * 60 + m;
+    }
+
+    function calcWorkHours(shift) {
+        const startMin = timeToMinutes(shift.startTime);
+        let endMin = timeToMinutes(shift.endTime);
+        if(startMin === null || endMin === null) return 0;
+        if(endMin <= startMin) endMin += 24 * 60;
+        let workMin = endMin - startMin;
+
+        if(shift.lunchStart && shift.lunchEnd) {
+            let ls = timeToMinutes(shift.lunchStart);
+            let le = timeToMinutes(shift.lunchEnd);
+            if(le <= ls) le += 24 * 60;
+            workMin -= (le - ls);
+        }
+        if(shift.dinnerStart && shift.dinnerEnd) {
+            let ds = timeToMinutes(shift.dinnerStart);
+            let de = timeToMinutes(shift.dinnerEnd);
+            if(de <= ds) de += 24 * 60;
+            workMin -= (de - ds);
+        }
+        return Math.round(workMin / 6) / 10;
+    }
+
+    // ========== 渲染 ==========
+    function renderTable() {
+        const tbody = document.getElementById("tableBody");
+        document.getElementById("tableInfo").textContent = `共 ${shifts.length} 个班次`;
+
+        if(shifts.length === 0) {
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="9">暂无班次数据</td></tr>`;
+            return;
+        }
+
+        function fmtMeal(shift, meal) {
+            const s = shift[meal + 'Start'];
+            const e = shift[meal + 'End'];
+            if(!s && !e) return '<span class="time-muted">—</span>';
+            return `${s || '--'} - ${e || '--'}`;
+        }
+
+        tbody.innerHTML = shifts.map(s => `
+            <tr>
+                <td style="text-align:center; font-weight:500; color:#6366f1;">${s.id}</td>
+                <td><span class="shift-name-badge">${s.name}</span></td>
+                <td style="font-weight:600;">${s.info || '<span class="time-muted">—</span>'}</td>
+                <td>${s.startTime}</td>
+                <td>${s.endTime}</td>
+                <td>${fmtMeal(s, 'lunch')}</td>
+                <td>${fmtMeal(s, 'dinner')}</td>
+                <td style="font-weight:600; color:#6366f1;">${s.workHours}h</td>
+                <td class="actions-cell" style="justify-content:center;">
+                    <button class="btn btn-sm btn-outline edit-btn" data-id="${s.id}">编辑</button>
+                    <button class="btn btn-sm btn-danger delete-btn" data-id="${s.id}">删除</button>
+                </td>
+            </tr>
+        `).join('');
+
+        tbody.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', () => openEditModal(btn.getAttribute('data-id')));
+        });
+        tbody.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', () => openDeleteModal(btn.getAttribute('data-id')));
+        });
+    }
+
+    function refreshAll() {
+        renderTable();
+    }
+
+    // ========== 弹窗逻辑 ==========
+    let editingShiftId = null;
+
+    function openAddModal() {
+        editingShiftId = null;
+        document.getElementById("modalTitle").textContent = "新增班次";
+        document.getElementById("modalName").value = '';
+        document.getElementById("modalInfo").value = '';
+        document.getElementById("modalStartTime").value = '';
+        document.getElementById("modalEndTime").value = '';
+        document.getElementById("modalLunchStart").value = '';
+        document.getElementById("modalLunchEnd").value = '';
+        document.getElementById("modalDinnerStart").value = '';
+        document.getElementById("modalDinnerEnd").value = '';
+        document.getElementById("shiftModal").classList.add("active");
+    }
+
+    function openEditModal(shiftId) {
+        const s = shifts.find(sh => sh.id === shiftId);
+        if(!s) return;
+        editingShiftId = shiftId;
+        document.getElementById("modalTitle").textContent = "编辑班次";
+        document.getElementById("modalName").value = s.name;
+        document.getElementById("modalInfo").value = s.info || '';
+        document.getElementById("modalStartTime").value = s.startTime;
+        document.getElementById("modalEndTime").value = s.endTime;
+        document.getElementById("modalLunchStart").value = s.lunchStart || '';
+        document.getElementById("modalLunchEnd").value = s.lunchEnd || '';
+        document.getElementById("modalDinnerStart").value = s.dinnerStart || '';
+        document.getElementById("modalDinnerEnd").value = s.dinnerEnd || '';
+        document.getElementById("shiftModal").classList.add("active");
+    }
+
+    function closeShiftModal() {
+        document.getElementById("shiftModal").classList.remove("active");
+    }
+
+    function saveShift() {
+        const name = document.getElementById("modalName").value;
+        const info = document.getElementById("modalInfo").value.trim();
+        const startTime = document.getElementById("modalStartTime").value;
+        const endTime = document.getElementById("modalEndTime").value;
+        const lunchStart = document.getElementById("modalLunchStart").value;
+        const lunchEnd = document.getElementById("modalLunchEnd").value;
+        const dinnerStart = document.getElementById("modalDinnerStart").value;
+        const dinnerEnd = document.getElementById("modalDinnerEnd").value;
+
+        if(!name) { showToast("请输入班次名称"); return; }
+        if((lunchStart && !lunchEnd) || (!lunchStart && lunchEnd)) { showToast("午餐时段需同时填写起止时间，或都留空"); return; }
+        if((dinnerStart && !dinnerEnd) || (!dinnerStart && dinnerEnd)) { showToast("晚餐时段需同时填写起止时间，或都留空"); return; }
+
+        const duplicate = shifts.find(s => s.name === name && s.id !== editingShiftId);
+        if(duplicate) { showToast(`班次"${name}"已存在`); return; }
+
+        if(editingShiftId) {
+            const s = shifts.find(sh => sh.id === editingShiftId);
+            if(s) {
+                s.name = name;
+                s.info = info;
+                s.startTime = startTime;
+                s.endTime = endTime;
+                s.lunchStart = lunchStart;
+                s.lunchEnd = lunchEnd;
+                s.dinnerStart = dinnerStart;
+                s.dinnerEnd = dinnerEnd;
+                s.workHours = calcWorkHours(s);
+            }
+            showToast("班次信息已更新");
+        } else {
+            const newShift = {
+                id: generateShiftId(),
+                name, info, startTime, endTime,
+                lunchStart, lunchEnd, dinnerStart, dinnerEnd
+            };
+            newShift.workHours = calcWorkHours(newShift);
+            shifts.push(newShift);
+            showToast("班次已创建");
+        }
+
+        saveShifts();
+        closeShiftModal();
+        refreshAll();
+    }
+
+    // 删除
+    let deleteTargetId = null;
+
+    function openDeleteModal(shiftId) {
+        deleteTargetId = shiftId;
+        const s = shifts.find(sh => sh.id === shiftId);
+        document.getElementById("deleteShiftName").textContent = s ? (s.name + (s.info ? ' (' + s.info + ')' : '')) : '';
+        document.getElementById("deleteModal").classList.add("active");
+    }
+
+    function closeDeleteModal() {
+        document.getElementById("deleteModal").classList.remove("active");
+        deleteTargetId = null;
+    }
+
+    function confirmDelete() {
+        if(!deleteTargetId) return;
+        shifts = shifts.filter(s => s.id !== deleteTargetId);
+        saveShifts();
+        closeDeleteModal();
+        refreshAll();
+        showToast("班次已删除");
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById("toastMsg");
+        toast.innerText = msg;
+        toast.style.display = "block";
+        setTimeout(() => { toast.style.display = "none"; }, 2500);
+    }
+
+    // ========== 初始化 ==========
+    function init() {
+        refreshAll();
+
+        document.getElementById("addShiftBtn").addEventListener("click", openAddModal);
+
+        document.getElementById("modalCancelBtn").addEventListener("click", closeShiftModal);
+        document.getElementById("modalSaveBtn").addEventListener("click", saveShift);
+        document.getElementById("shiftModal").addEventListener("click", (e) => {
+            if(e.target === document.getElementById("shiftModal")) closeShiftModal();
+        });
+
+        document.getElementById("deleteCancelBtn").addEventListener("click", closeDeleteModal);
+        document.getElementById("deleteConfirmBtn").addEventListener("click", confirmDelete);
+        document.getElementById("deleteModal").addEventListener("click", (e) => {
+            if(e.target === document.getElementById("deleteModal")) closeDeleteModal();
+        });
+
+        document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const page = item.getAttribute('data-page');
+                if(page === 'shifts') return;
+                if(page === 'schedule') {
+                    window.location.href = '排班表.html';
+                    return;
+                }
+                if(page === 'employees') {
+                    window.location.href = '员工管理.html';
+                    return;
+                }
+                e.preventDefault();
+                showToast('该页面尚未开通，敬请期待');
+            });
+        });
+    }
+    init();
+</script>
+</body>
+</html>

@@ -279,9 +279,9 @@
 <aside class="sidebar">
     <div class="sidebar-logo">客服排班系统</div>
     <nav class="sidebar-nav">
-        <a class="nav-item active" data-page="schedule">排班表</a>
-        <a class="nav-item" data-page="employees">员工管理</a>
-        <a class="nav-item" data-page="shifts">班次设置</a>
+        <a class="nav-item active" data-page="schedule" href="排班表.html">排班表</a>
+        <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
+        <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
         <a class="nav-item" data-page="stats">排班统计</a>
     </nav>
 </aside>
@@ -447,21 +447,60 @@
 <script>
     // ========== 数据层 ==========
     let scheduleMap = new Map();
-    const teamOptions = ["在线组", "热线组", "售后组", "主管", "综合组"];
-    const shiftOptions = ["A班", "B班", "C班", "休息", "请假"];
-    const workShifts = ["A班", "B班", "C班"];
+    function getTeamOptions() {
+        const teams = [...new Set(employees.map(e => e.team))];
+        return teams.length > 0 ? teams.sort() : ["综合组"];
+    }
+    const SHIFT_STORAGE_KEY = 'schedule_shifts';
     const weekDayNames = ["日", "一", "二", "三", "四", "五", "六"];
 
-    let employees = [
-        {name: "张三", team: "在线组"},
-        {name: "李四", team: "热线组"},
-        {name: "王芳", team: "售后组"},
-        {name: "赵磊", team: "在线组"},
-        {name: "陈敏", team: "主管"}
-    ];
+    function loadShiftOptions() {
+        const stored = localStorage.getItem(SHIFT_STORAGE_KEY);
+        if(stored) {
+            const data = JSON.parse(stored);
+            return [...data.map(s => s.name), "休息", "请假"];
+        }
+        return ["A班", "B班", "C班", "休息", "请假"];
+    }
+
+    function loadWorkShifts() {
+        const stored = localStorage.getItem(SHIFT_STORAGE_KEY);
+        if(stored) {
+            return JSON.parse(stored).map(s => s.name);
+        }
+        return ["A班", "B班", "C班"];
+    }
+
+    let shiftOptions = loadShiftOptions();
+    let workShifts = loadWorkShifts();
+
+    const STORAGE_KEY = 'schedule_employees';
+
+    function loadEmployeesFromStorage() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            const data = JSON.parse(stored);
+            return data.map(e => ({ name: e.name, team: e.team }));
+        }
+        const defaults = [
+            {name: "张三", team: "在线组"},
+            {name: "李四", team: "热线组"},
+            {name: "王芳", team: "售后组"},
+            {name: "赵磊", team: "在线组"},
+            {name: "陈敏", team: "主管"}
+        ];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults.map((e, i) => ({
+            id: `EMP${String(i + 1).padStart(3, '0')}`, name: e.name, team: e.team,
+            position: e.team === '主管' ? '主管' : '客服', supervisor: e.team === '主管' ? '' : '陈敏',
+            entryDate: '2024-01-01'
+        }))));
+        return defaults;
+    }
+
+    let employees = loadEmployeesFromStorage();
 
     let filterSelectedEmployees = getEmployeeNames();
-    let filterSelectedTeams = [...teamOptions];
+    let filterSelectedTeams = [...getTeamOptions()];
     let modalSelectedTeams = [];
     let modalSelectedEmployees = [];
 
@@ -716,7 +755,7 @@
             searchId: 'filterTeamSearch', selectAllId: 'filterTeamAll',
             optionsId: 'filterTeamOptions', clearId: 'filterTeamClear',
             okId: 'filterTeamOk', placeholder: '全部团队',
-            getOptions: () => teamOptions,
+            getOptions: () => getTeamOptions(),
             getSelected: () => filterSelectedTeams,
             setSelected: (v) => { filterSelectedTeams = v; }
         });
@@ -726,7 +765,7 @@
             searchId: 'modalTeamSearch', selectAllId: 'modalTeamAll',
             optionsId: 'modalTeamOptions', clearId: 'modalTeamClear',
             okId: 'modalTeamOk', placeholder: '请选择团队',
-            getOptions: () => teamOptions,
+            getOptions: () => getTeamOptions(),
             getSelected: () => modalSelectedTeams,
             setSelected: (v) => {
                 modalSelectedTeams = v;
@@ -866,11 +905,14 @@
 
     function buildModalShiftRadios() {
         const container = document.getElementById("modalShiftRadios");
-        const colors = {A班:"work", B班:"work", C班:"work", 休息:"rest", 请假:"leave"};
-        container.innerHTML = shiftOptions.map(s =>
+        const colorMap = {};
+        workShifts.forEach(s => { colorMap[s] = "work"; });
+        colorMap["休息"] = "rest";
+        colorMap["请假"] = "leave";
+        container.innerHTML = shiftOptions.map((s, i) =>
             `<div class="radio-option">
-                <input type="radio" name="modalShift" value="${s}" id="ms_${s}" ${s==="A班"?"checked":""}>
-                <label for="ms_${s}" class="${colors[s]||''}">${s}</label>
+                <input type="radio" name="modalShift" value="${s}" id="ms_${s}" ${i===0?"checked":""}>
+                <label for="ms_${s}" class="${colorMap[s]||'work'}">${s}</label>
             </div>`
         ).join('');
     }
@@ -917,7 +959,7 @@
 
     function resetFilter() {
         filterSelectedEmployees = getEmployeeNames();
-        filterSelectedTeams = [...teamOptions];
+        filterSelectedTeams = [...getTeamOptions()];
         msPageEmployee.renderTrigger();
         msPageEmployee.renderDropdown();
         msPageTeam.renderTrigger();
@@ -991,6 +1033,10 @@
                 if(page === 'schedule') {
                     document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
                     item.classList.add('active');
+                } else if(page === 'employees') {
+                    window.location.href = '员工管理.html';
+                } else if(page === 'shifts') {
+                    window.location.href = '班次设置.html';
                 } else {
                     showToast('该页面尚未开通，敬请期待');
                 }
