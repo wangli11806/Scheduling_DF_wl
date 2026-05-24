@@ -523,4 +523,4 @@ if __name__ == "__main__":
     print("  客服排班系统后端已启动")
     print("  打开浏览器访问: http://127.0.0.1:5000")
     print("=" * 50)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
