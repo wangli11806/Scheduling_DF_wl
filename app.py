@@ -917,51 +917,77 @@ def save_notify_config(cfg):
 
 
 def sync_all_scheduled_tasks(cfg):
-    """同步 Windows 计划任务：创建一个每分钟运行的检查任务"""
-    task_name = r"\排班系统\排班每日通知"
+    """同步系统定时任务：Windows 用计划任务，Linux 用 cron"""
     tasks = cfg.get("tasks", [])
     has_enabled = any(t.get("enabled", True) for t in tasks)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     script_path = os.path.join(script_dir, "send_daily_notice.py")
     python_exe = sys.executable
-    try:
-        import subprocess
-        # 检查任务是否存在
-        check = subprocess.run(
-            ["schtasks", "/query", "/tn", task_name],
-            capture_output=True, text=True
-        )
-        if check.returncode != 0:
-            if has_enabled:
-                # 创建新任务：每分钟运行一次
-                subprocess.run(
-                    ["schtasks", "/create", "/tn", task_name, "/sc", "minute", "/mo", "1",
-                     "/tr", f'"{python_exe}" "{script_path}" --check-and-send',
-                     "/f"],
-                    capture_output=True, text=True
-                )
+
+    import subprocess
+    if sys.platform == "win32":
+        _sync_windows_task(has_enabled, python_exe, script_path)
+    else:
+        _sync_linux_cron(has_enabled, python_exe, script_path)
+
+
+def _sync_windows_task(has_enabled, python_exe, script_path):
+    import subprocess
+    task_name = r"\排班系统\排班每日通知"
+    check = subprocess.run(
+        ["schtasks", "/query", "/tn", task_name],
+        capture_output=True, text=True
+    )
+    if check.returncode != 0:
+        if has_enabled:
+            subprocess.run(
+                ["schtasks", "/create", "/tn", task_name, "/sc", "minute", "/mo", "1",
+                 "/tr", f'"{python_exe}" "{script_path}" --check-and-send',
+                 "/f"],
+                capture_output=True, text=True
+            )
+    else:
+        if has_enabled:
+            subprocess.run(
+                ["schtasks", "/change", "/tn", task_name, "/enable"],
+                capture_output=True, text=True
+            )
         else:
-            if has_enabled:
-                subprocess.run(
-                    ["schtasks", "/change", "/tn", task_name, "/enable"],
-                    capture_output=True, text=True
-                )
-            else:
-                subprocess.run(
-                    ["schtasks", "/change", "/tn", task_name, "/disable"],
-                    capture_output=True, text=True
-                )
-        return True
-    except Exception:
-        return False
+            subprocess.run(
+                ["schtasks", "/change", "/tn", task_name, "/disable"],
+                capture_output=True, text=True
+            )
+
+
+def _sync_linux_cron(has_enabled, python_exe, script_path):
+    import subprocess
+    marker = "# 排班通知定时任务"
+    cron_line = f"* * * * * {python_exe} {script_path} --check-and-send {marker}"
+
+    proc = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+    current = proc.stdout if proc.returncode == 0 else ""
+
+    lines = [l for l in current.splitlines() if marker not in l]
+    if has_enabled:
+        lines.append(cron_line)
+
+    new_crontab = "\n".join(lines) + "\n" if lines else ""
+    subprocess.run(["crontab", "-"], input=new_crontab, capture_output=True, text=True)
 
 
 def get_all_task_status():
-    """获取计划任务状态及各任务信息"""
+    """获取计划任务状态"""
+    if sys.platform == "win32":
+        return _get_windows_task_status()
+    else:
+        return _get_linux_cron_status()
+
+
+def _get_windows_task_status():
+    import subprocess
     task_name = r"\排班系统\排班每日通知"
     result = {"exists": False, "enabled": False, "next_run": ""}
     try:
-        import subprocess
         r = subprocess.run(
             ["schtasks", "/query", "/tn", task_name, "/fo", "csv", "/v"],
             capture_output=True, text=True
@@ -976,6 +1002,20 @@ def get_all_task_status():
                         "enabled": fields[5] != "Disabled",
                         "next_run": fields[15]
                     }
+    except Exception:
+        pass
+    return result
+
+
+def _get_linux_cron_status():
+    import subprocess
+    marker = "# 排班通知定时任务"
+    result = {"exists": False, "enabled": False, "next_run": "每分钟"}
+    try:
+        r = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+        if r.returncode == 0 and marker in r.stdout:
+            result["exists"] = True
+            result["enabled"] = True
     except Exception:
         pass
     return result
