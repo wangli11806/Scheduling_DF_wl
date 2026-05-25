@@ -100,10 +100,12 @@
         /* 多选下拉 */
         .multi-select { position: relative; user-select: none; }
         .multi-select-trigger {
-            display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
-            min-height: 34px; padding: 3px 8px; border: 1px solid #cbd5e1;
+            display: block;
+            height: 34px; padding: 0 10px; border: 1px solid #cbd5e1;
             border-radius: 10px; background: white; cursor: pointer; font-size: 0.92rem;
             transition: border-color 0.15s;
+            overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+            line-height: 32px;
         }
         .multi-select-trigger:hover { border-color: #94a3b8; }
         .multi-select.open .multi-select-trigger { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.12); }
@@ -116,9 +118,9 @@
         .ms-tag .ms-tag-x:hover { opacity: 1; }
         .ms-placeholder { color: #94a3b8; font-size: 0.92rem; }
         .ms-dropdown {
-            display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px;
+            display: none; position: fixed; z-index: 999;
             background: white; border: 1px solid #e2e8f0; border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 100; max-height: 280px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-height: 280px;
             overflow: hidden;
         }
         .multi-select.open .ms-dropdown { display: block; }
@@ -807,17 +809,8 @@
             } else if(sel.length === allOpts.length && allOpts.length > 0) {
                 trigger.innerHTML = `<span class="ms-placeholder" style="color:#3730a3;font-weight:500;">全部 (${allOpts.length})</span>`;
             } else {
-                trigger.innerHTML = sel.map(v => `<span class="ms-tag">${v}<span class="ms-tag-x" data-val="${v}">×</span></span>`).join('');
-                trigger.querySelectorAll('.ms-tag-x').forEach(x => {
-                    x.addEventListener('click', (ev) => {
-                        ev.stopPropagation();
-                        const val = x.getAttribute('data-val');
-                        setSelected(getSelected().filter(v => v !== val));
-                        renderDropdown();
-                        renderTrigger();
-                        if(config.onChange) config.onChange();
-                    });
-                });
+                trigger.textContent = sel.join('、');
+                trigger.title = sel.join('、');
             }
         }
 
@@ -848,6 +841,22 @@
             });
         }
 
+        const dropdown = container.querySelector('.ms-dropdown');
+
+        function positionDropdown() {
+            const rect = trigger.getBoundingClientRect();
+            const dropdownH = dropdown.scrollHeight || 280;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const spaceAbove = rect.top;
+            if (spaceBelow < dropdownH && spaceAbove > spaceBelow) {
+                dropdown.style.top = Math.max(0, rect.top - Math.min(dropdownH, 280) - 4) + 'px';
+            } else {
+                dropdown.style.top = Math.min(rect.bottom + 4, window.innerHeight - Math.min(dropdownH, 280)) + 'px';
+            }
+            dropdown.style.left = Math.min(rect.left, window.innerWidth - 260) + 'px';
+            dropdown.style.width = Math.max(rect.width, 200) + 'px';
+        }
+
         trigger.addEventListener('click', (e) => {
             e.stopPropagation();
             const isOpen = container.classList.contains('open');
@@ -856,6 +865,7 @@
                 container.classList.add('open');
                 searchInput.value = '';
                 renderDropdown();
+                positionDropdown();
                 setTimeout(() => searchInput.focus(), 50);
             }
         });
@@ -916,7 +926,8 @@
             okId: 'filterTeamOk', placeholder: '全部团队',
             getOptions: () => getTeamOptions(),
             getSelected: () => filterSelectedTeams,
-            setSelected: (v) => { filterSelectedTeams = v; }
+            setSelected: (v) => { filterSelectedTeams = v; },
+            onChange: () => { renderCurrentView(); }
         });
 
         filterSelectedShifts = [...shiftOptions];
@@ -1405,8 +1416,12 @@
         document.getElementById("queryBtn").addEventListener("click", async () => {
             const statusFilter = document.querySelector('input[name="filterStatus"]:checked').value;
             employees = await loadEmployeesFromAPI(statusFilter);
-            filterSelectedEmployees = getEmployeeNames();
-            filterSelectedTeams = [...getTeamOptions()];
+            const newNames = getEmployeeNames();
+            const newTeams = getTeamOptions();
+            filterSelectedEmployees = filterSelectedEmployees.filter(e => newNames.includes(e));
+            if (filterSelectedEmployees.length === 0) filterSelectedEmployees = newNames;
+            filterSelectedTeams = filterSelectedTeams.filter(t => newTeams.includes(t));
+            if (filterSelectedTeams.length === 0) filterSelectedTeams = newTeams;
             rebuildAllPageFilters();
             renderCurrentView();
             showToast("筛选完成");

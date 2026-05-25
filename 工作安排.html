@@ -63,10 +63,12 @@
 
         .multi-select { position: relative; user-select: none; }
         .multi-select-trigger {
-            display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
-            min-height: 34px; padding: 3px 8px; border: 1px solid #cbd5e1;
+            display: block;
+            height: 34px; padding: 0 10px; border: 1px solid #cbd5e1;
             border-radius: 10px; background: white; cursor: pointer; font-size: 0.92rem;
             transition: border-color 0.15s;
+            overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+            line-height: 32px;
         }
         .multi-select-trigger:hover { border-color: #94a3b8; }
         .multi-select.open .multi-select-trigger { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.12); }
@@ -79,9 +81,10 @@
         .ms-tag .ms-tag-x:hover { opacity: 1; }
         .ms-placeholder { color: #94a3b8; font-size: 0.92rem; }
         .ms-dropdown {
-            display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px;
+            display: none; position: fixed; z-index: 999;
             background: white; border: 1px solid #e2e8f0; border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 100; max-height: 280px; overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-height: 280px;
+            overflow: hidden;
         }
         .multi-select.open .ms-dropdown { display: block; }
         .ms-search { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 6px; align-items: center; }
@@ -257,7 +260,7 @@
 <script>
 const API_BASE = '/api';
 const WORK_TYPES = ["热线","在线","工单","反向工单","自主售后","售后单","紧急","本地生活","卡密查询"];
-const LUNCH_SLOTS = ["","11:30-12:00","12:00-12:30","12:30-13:00","13:00-13:30","13:30-14:00"];
+const LUNCH_SLOTS = ["","11:00-11:30","11:30-12:00","12:00-12:30","12:30-13:00","13:00-13:30","13:30-14:00"];
 const DINNER_SLOTS = ["","17:00-17:30","17:30-18:00","18:00-18:30","18:30-19:00","19:00-19:30","19:30-20:00"];
 const LEAVE_SHIFTS = new Set(["休息","放休","请假"]);
 
@@ -566,16 +569,8 @@ function initMultiSelect(config) {
         } else if (sel.length === allOpts.length && allOpts.length > 0) {
             trigger.innerHTML = `<span class="ms-placeholder" style="color:#3730a3;font-weight:500;">全部 (${allOpts.length})</span>`;
         } else {
-            trigger.innerHTML = sel.map(v => `<span class="ms-tag">${v}<span class="ms-tag-x" data-val="${v}">×</span></span>`).join('');
-            trigger.querySelectorAll('.ms-tag-x').forEach(x => {
-                x.addEventListener('click', (ev) => {
-                    ev.stopPropagation();
-                    setSelected(getSelected().filter(v => v !== x.getAttribute('data-val')));
-                    renderDropdown();
-                    renderTrigger();
-                    if (onChange) onChange();
-                });
-            });
+            trigger.textContent = sel.join('、');
+            trigger.title = sel.join('、');
         }
     }
 
@@ -602,6 +597,22 @@ function initMultiSelect(config) {
         });
     }
 
+    const dropdown = container.querySelector('.ms-dropdown');
+
+    function positionDropdown() {
+        const rect = trigger.getBoundingClientRect();
+        const dropdownH = dropdown.scrollHeight || 280;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        if (spaceBelow < dropdownH && spaceAbove > spaceBelow) {
+            dropdown.style.top = Math.max(0, rect.top - Math.min(dropdownH, 280) - 4) + 'px';
+        } else {
+            dropdown.style.top = Math.min(rect.bottom + 4, window.innerHeight - Math.min(dropdownH, 280)) + 'px';
+        }
+        dropdown.style.left = Math.min(rect.left, window.innerWidth - 260) + 'px';
+        dropdown.style.width = Math.max(rect.width, 200) + 'px';
+    }
+
     trigger.addEventListener('click', (e) => {
         e.stopPropagation();
         const isOpen = container.classList.contains('open');
@@ -610,6 +621,7 @@ function initMultiSelect(config) {
             container.classList.add('open');
             searchInput.value = '';
             renderDropdown();
+            positionDropdown();
             setTimeout(() => searchInput.focus(), 50);
         }
     });
