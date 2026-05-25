@@ -1,0 +1,35 @@
+{
+  "webhook_token": "cd1b612794d4a022c3c688aba1674e7500e4fe9a116b626aa145a1727a3b5a37",
+  "tasks": [
+    {
+      "_scheduler": {
+        "enabled": true,
+        "exists": true,
+        "next_run": "wangli"
+      },
+      "date_offset": 0,
+      "enabled": true,
+      "id": "morning",
+      "name": "早间排班通知",
+      "prefix": "早上好！☀️ 今日排班如下：",
+      "suffix": "祝大家工作愉快！💪",
+      "template": "schedule",
+      "time": "08:00"
+    },
+    {
+      "_scheduler": {
+        "enabled": true,
+        "exists": true,
+        "next_run": "wangli"
+      },
+      "date_offset": 1,
+      "enabled": true,
+      "id": "evening",
+      "name": "晚间明日预览",
+      "prefix": "晚上好！明日排班安排：📋",
+      "suffix": "请提前做好准备~🌙",
+      "template": "schedule",
+      "time": "20:00"
+    }
+  ]
+}

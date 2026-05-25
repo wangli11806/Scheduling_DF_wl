@@ -217,6 +217,7 @@
         <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
         <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
         <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
+        <a class="nav-item" data-page="notify" href="通知设置.html">通知设置</a>
         <a class="nav-item" data-page="stats">排班统计</a>
     </nav>
 </aside>
@@ -700,7 +701,8 @@ async function init() {
                 schedule: '排班表.html',
                 employees: '员工管理.html',
                 shifts: '班次设置.html',
-                work: '工作安排.html'
+                work: '工作安排.html',
+                notify: '通知设置.html'
             };
             if (pageMap[page]) {
                 window.location.href = pageMap[page];

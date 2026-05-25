@@ -885,6 +885,334 @@ def api_db_stats():
     })
 
 
+# ==================== 通知设置 API ====================
+
+NOTIFY_CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notify_config.json")
+TEAM_ORDER = ["在线组", "热线组", "售后组", "综合组", "VIP组", "质检组", "支持组"]
+
+DEFAULT_NOTIFY_CONFIG = {
+    "webhook_token": "",
+    "tasks": []
+}
+
+
+def load_notify_config():
+    if os.path.exists(NOTIFY_CONFIG_FILE):
+        try:
+            with open(NOTIFY_CONFIG_FILE, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                if "webhook_token" not in cfg:
+                    cfg["webhook_token"] = ""
+                if "tasks" not in cfg:
+                    cfg["tasks"] = []
+                return cfg
+        except Exception:
+            pass
+    return {"webhook_token": "", "tasks": []}
+
+
+def save_notify_config(cfg):
+    with open(NOTIFY_CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+
+def sync_all_scheduled_tasks(cfg):
+    """同步 Windows 计划任务：创建一个每分钟运行的检查任务"""
+    task_name = r"\排班系统\排班每日通知"
+    tasks = cfg.get("tasks", [])
+    has_enabled = any(t.get("enabled", True) for t in tasks)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(script_dir, "send_daily_notice.py")
+    python_exe = sys.executable
+    try:
+        import subprocess
+        # 检查任务是否存在
+        check = subprocess.run(
+            ["schtasks", "/query", "/tn", task_name],
+            capture_output=True, text=True
+        )
+        if check.returncode != 0:
+            if has_enabled:
+                # 创建新任务：每分钟运行一次
+                subprocess.run(
+                    ["schtasks", "/create", "/tn", task_name, "/sc", "minute", "/mo", "1",
+                     "/tr", f'"{python_exe}" "{script_path}" --check-and-send',
+                     "/f"],
+                    capture_output=True, text=True
+                )
+        else:
+            if has_enabled:
+                subprocess.run(
+                    ["schtasks", "/change", "/tn", task_name, "/enable"],
+                    capture_output=True, text=True
+                )
+            else:
+                subprocess.run(
+                    ["schtasks", "/change", "/tn", task_name, "/disable"],
+                    capture_output=True, text=True
+                )
+        return True
+    except Exception:
+        return False
+
+
+def get_all_task_status():
+    """获取计划任务状态及各任务信息"""
+    task_name = r"\排班系统\排班每日通知"
+    result = {"exists": False, "enabled": False, "next_run": ""}
+    try:
+        import subprocess
+        r = subprocess.run(
+            ["schtasks", "/query", "/tn", task_name, "/fo", "csv", "/v"],
+            capture_output=True, text=True
+        )
+        if r.returncode == 0:
+            lines = r.stdout.strip().split("\n")
+            if len(lines) >= 2:
+                fields = lines[1].replace('"', '').split(",")
+                if len(fields) >= 16:
+                    result = {
+                        "exists": True,
+                        "enabled": fields[5] != "Disabled",
+                        "next_run": fields[15]
+                    }
+    except Exception:
+        pass
+    return result
+
+
+def build_schedule_message(schedules, target_date, prefix="", suffix=""):
+    """构建排班消息（可复用的核心逻辑）"""
+    weekday = ["一", "二", "三", "四", "五", "六", "日"][date.fromisoformat(target_date).weekday()]
+    lines = [f"#### 排班通知 {target_date} 周{weekday}"]
+
+    if not schedules:
+        lines.append("\n暂无排班数据")
+    else:
+        supervisors = [s for s in schedules if s["position"] == "主管"]
+        agents = [s for s in schedules if s["position"] != "主管"]
+        team_map = {}
+        for a in agents:
+            t = a["team"]
+            if t not in team_map:
+                team_map[t] = []
+            team_map[t].append(a["name"])
+
+        lines.append(f"\n上班人数：**{len(schedules)}人**（含主管）")
+        if supervisors:
+            lines.append(f"主管（{len(supervisors)}人）：{', '.join(s['name'] for s in supervisors)}")
+        for t in TEAM_ORDER:
+            if t not in team_map:
+                continue
+            emps = team_map[t]
+            lines.append(f"{t}（{len(emps)}人）：{', '.join(emps)}")
+
+    body = "\n\n".join(lines)
+    parts = []
+    if prefix.strip():
+        parts.append(prefix.strip())
+    parts.append(body)
+    if suffix.strip():
+        parts.append(suffix.strip())
+    return "\n\n".join(parts)
+
+
+def query_schedule_data(target_date):
+    """查询指定日期的排班数据"""
+    db = get_db()
+    cur = db.execute("""
+        SELECT e.name, e.team, e.position, s.shift_name
+        FROM schedules s JOIN employees e ON s.employee_name = e.name
+        WHERE s.schedule_date = ? AND e.status = 'active'
+          AND s.shift_name NOT IN ('休息','放休','请假')
+        ORDER BY e.team, s.shift_name, e.name
+    """, (target_date,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+# ── 配置读写 ──
+
+@app.route("/api/notify/config", methods=["GET"])
+def api_notify_config():
+    cfg = load_notify_config()
+    task_status = get_all_task_status()
+    # 为每个任务附加计划任务状态
+    for task in cfg.get("tasks", []):
+        task["_scheduler"] = task_status
+    return jsonify(cfg)
+
+
+@app.route("/api/notify/config", methods=["POST"])
+def api_notify_config_save():
+    data = request.json or {}
+    cfg = load_notify_config()
+    if "webhook_token" in data:
+        cfg["webhook_token"] = data["webhook_token"].strip()
+    if "tasks" in data:
+        cfg["tasks"] = data["tasks"]
+    save_notify_config(cfg)
+    sync_all_scheduled_tasks(cfg)
+    task_status = get_all_task_status()
+    for task in cfg.get("tasks", []):
+        task["_scheduler"] = task_status
+    return jsonify({"ok": True, "config": cfg})
+
+
+# ── 测试 Webhook ──
+
+@app.route("/api/notify/test", methods=["POST"])
+def api_notify_test():
+    cfg = load_notify_config()
+    token = cfg.get("webhook_token", "")
+    if not token:
+        return jsonify({"error": "请先配置 Webhook Token"}), 400
+
+    import urllib.request
+    payload = json.dumps({
+        "msgtype": "text",
+        "text": {"content": " 排班 系统测试消息，Webhook配置成功！"}
+    }, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        f"https://oapi.dingtalk.com/robot/send?access_token={token}",
+        data=payload, headers={"Content-Type": "application/json"}
+    )
+    try:
+        resp = urllib.request.urlopen(req)
+        result = json.loads(resp.read().decode("utf-8"))
+        if result.get("errcode") == 0:
+            return jsonify({"ok": True, "message": "测试消息已发送"})
+        return jsonify({"error": result.get("errmsg", "发送失败")}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+# ── 发送通知 ──
+
+@app.route("/api/notify/send", methods=["POST"])
+def api_notify_send():
+    data = request.json or {}
+    cfg = load_notify_config()
+    token = cfg.get("webhook_token", "")
+    if not token:
+        return jsonify({"error": "请先配置 Webhook Token"}), 400
+
+    task_id = data.get("task_id", "")
+    task = next((t for t in cfg.get("tasks", []) if t["id"] == task_id), None)
+
+    # 确定目标日期
+    if data.get("date"):
+        target_date = data["date"]
+    elif task:
+        from datetime import timedelta
+        offset = task.get("date_offset", 0)
+        d = date.today() + timedelta(days=offset)
+        target_date = d.isoformat()
+    else:
+        target_date = date.today().isoformat()
+
+    # 确定前后缀
+    prefix = data.get("prefix", task.get("prefix", "") if task else "")
+    suffix = data.get("suffix", task.get("suffix", "") if task else "")
+    task_name = task.get("name", "") if task else ""
+
+    schedules = query_schedule_data(target_date)
+    msg = build_schedule_message(schedules, target_date, prefix=prefix, suffix=suffix)
+    title = f"{task_name} {target_date}".strip() if task_name else f"排班通知 {target_date}"
+
+    import urllib.request
+    payload = json.dumps({"msgtype": "markdown", "markdown": {"title": title, "text": msg}}, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        f"https://oapi.dingtalk.com/robot/send?access_token={token}",
+        data=payload, headers={"Content-Type": "application/json"}
+    )
+    try:
+        resp = urllib.request.urlopen(req)
+        result = json.loads(resp.read().decode("utf-8"))
+        if result.get("errcode") == 0:
+            return jsonify({"ok": True, "message": f"{target_date} 排班通知已发送"})
+        return jsonify({"error": result.get("errmsg", "发送失败")}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+# ── 消息预览 ──
+
+@app.route("/api/notify/preview", methods=["GET"])
+def api_notify_preview():
+    target_date = request.args.get("date", date.today().isoformat())
+    prefix = request.args.get("prefix", "")
+    suffix = request.args.get("suffix", "")
+
+    schedules = query_schedule_data(target_date)
+    text = build_schedule_message(schedules, target_date, prefix=prefix, suffix=suffix)
+    return jsonify({"text": text})
+
+
+# ── 任务 CRUD ──
+
+@app.route("/api/notify/task", methods=["POST"])
+def api_notify_task_add():
+    data = request.json or {}
+    cfg = load_notify_config()
+    task = {
+        "id": data.get("id", "").strip(),
+        "name": data.get("name", "").strip(),
+        "time": data.get("time", "08:00"),
+        "enabled": data.get("enabled", True),
+        "date_offset": int(data.get("date_offset", 0)),
+        "prefix": data.get("prefix", ""),
+        "suffix": data.get("suffix", ""),
+        "template": "schedule"
+    }
+    if not task["id"]:
+        return jsonify({"error": "任务ID不能为空"}), 400
+    # 检查重复
+    if any(t["id"] == task["id"] for t in cfg.get("tasks", [])):
+        return jsonify({"error": "任务ID已存在"}), 400
+    cfg.setdefault("tasks", []).append(task)
+    save_notify_config(cfg)
+    sync_all_scheduled_tasks(cfg)
+    return jsonify({"ok": True, "task": task})
+
+
+@app.route("/api/notify/task/<task_id>", methods=["PUT"])
+def api_notify_task_update(task_id):
+    data = request.json or {}
+    cfg = load_notify_config()
+    tasks = cfg.get("tasks", [])
+    idx = next((i for i, t in enumerate(tasks) if t["id"] == task_id), None)
+    if idx is None:
+        return jsonify({"error": "任务不存在"}), 404
+    task = tasks[idx]
+    if "name" in data:
+        task["name"] = data["name"].strip()
+    if "time" in data:
+        task["time"] = data["time"]
+    if "enabled" in data:
+        task["enabled"] = bool(data["enabled"])
+    if "date_offset" in data:
+        task["date_offset"] = int(data["date_offset"])
+    if "prefix" in data:
+        task["prefix"] = data["prefix"]
+    if "suffix" in data:
+        task["suffix"] = data["suffix"]
+    save_notify_config(cfg)
+    sync_all_scheduled_tasks(cfg)
+    return jsonify({"ok": True, "task": task})
+
+
+@app.route("/api/notify/task/<task_id>", methods=["DELETE"])
+def api_notify_task_delete(task_id):
+    cfg = load_notify_config()
+    tasks = cfg.get("tasks", [])
+    cfg["tasks"] = [t for t in tasks if t["id"] != task_id]
+    if len(cfg["tasks"]) == len(tasks):
+        return jsonify({"error": "任务不存在"}), 404
+    save_notify_config(cfg)
+    sync_all_scheduled_tasks(cfg)
+    return jsonify({"ok": True})
+
+
 # ==================== 静态文件 ====================
 
 @app.route("/")

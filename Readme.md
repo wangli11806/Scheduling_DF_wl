@@ -42,6 +42,9 @@ python app.py
 ├── 工作安排.html       # 工作安排页面（每日工作分配、用餐安排）
 ├── 员工管理.html       # 员工管理页面（CRUD + 批量导入）
 ├── 班次设置.html       # 班次设置页面（CRUD）
+├── 通知设置.html       # 通知设置页面（钉钉机器人 + 定时任务管理）
+├── send_daily_notice.py  # 排班通知脚本（由 Windows 计划任务定时调用）
+├── notify_config.json  # 通知配置文件（webhook token + 任务列表）
 └── Readme.md           # 本文件
 ```
 
@@ -151,6 +154,21 @@ GET    /api/db/stats                     统计信息
 GET    /api/db/download                  下载 schedule.db
 ```
 
+### 通知设置
+
+```
+GET    /api/notify/config                读取配置（webhook_token + 任务列表 + 计划任务状态）
+POST   /api/notify/config                保存配置并同步 Windows 计划任务
+POST   /api/notify/test                  发送 Webhook 测试消息
+POST   /api/notify/send                  手动发送通知 {task_id, date?}
+GET    /api/notify/preview?date=&prefix=&suffix=  预览消息内容
+POST   /api/notify/task                  新增定时任务
+PUT    /api/notify/task/<id>             编辑定时任务
+DELETE /api/notify/task/<id>             删除定时任务
+```
+
+通知消息格式：**前缀（自定义） + 排班模板（按团队统计） + 后缀（自定义）**
+
 ### 页面间跳转
 
 总览页月历点击日期可跳转到排班表对应日视图，通过 URL 参数传递：
@@ -158,6 +176,68 @@ GET    /api/db/download                  下载 schedule.db
 ```
 排班表.html?date=2026-05-15&view=day    # 指定日期和视图
 排班表.html?date=2026-05-12&view=week   # 指定日期和周视图
+```
+
+---
+
+## 钉钉群通知
+
+系统内置钉钉群机器人通知功能，支持**多任务定时推送**排班信息到钉钉群。
+
+### 配置步骤
+
+1. 在钉钉群 → 群设置 → 智能群助手 → 添加**自定义机器人**
+2. 安全设置选择**自定义关键词**，填入 `排班`
+3. 复制 Webhook 地址中 `access_token=` 后的内容
+4. 打开系统「通知设置」页面，粘贴 Token 并保存
+5. 点击「发送测试消息」验证配置
+
+### 定时任务
+
+支持配置多个定时任务，每个任务包含：
+
+| 配置项 | 说明 |
+|--------|------|
+| 任务名称 | 显示名称，如「早间排班通知」 |
+| 触发时间 | 每天发送的时间点 HH:MM |
+| 日期偏移 | 当天/明天/后天（预览和计算目标日期用） |
+| 前缀 | 自定义开头语，如「早上好！☀️ 今日排班如下：」 |
+| 后缀 | 自定义结束语，如「祝大家工作愉快！💪」 |
+| 启用/停用 | 独立开关，不影响其他任务 |
+
+### 消息模板
+
+最终推送的消息由三部分组成：
+
+> **前缀**（自定义开头语）
+> 
+> #### 排班通知 2026-05-25 周一
+> 
+> 上班人数：**26人**（含主管）
+> 主管（4人）：赵月, 王鹏飞, 俞蕾, 胡玉婷
+> 在线组（6人）：孙赟, 张颖, ...
+> ...
+> 
+> **后缀**（自定义结束语）
+
+### 调度机制
+
+- 保存配置后自动创建 Windows 计划任务 `\排班系统\排班每日通知`
+- 每分钟检查一次，匹配当前时间 HH:MM 的启用任务自动发送
+- 所有任务停用后计划任务自动禁用
+- 手动发送不受调度影响，可在页面上随时触发
+
+### 命令行用法
+
+```bash
+# 手动执行指定任务
+python send_daily_notice.py --task-id morning
+
+# 指定日期执行
+python send_daily_notice.py --task-id evening --date 2026-05-26
+
+# 定时调度入口（由 Windows 计划任务调用）
+python send_daily_notice.py --check-and-send
 ```
 
 ---
@@ -198,3 +278,4 @@ docker run -d -p 5000:5000 -v ./data:/app schedule-system
 - 系统无登录鉴权，内网部署时建议搭配 nginx basic auth 或 VPN
 - 班次颜色方案：A班(蓝)、B班(青)、C班(紫)、D班(靛)、E班(黄)、休息/放休(灰)、请假(橙)。T班/F班可在班次设置中自行添加，导入时支持对应代码。
 - 团队颜色方案：在线组(绿)、热线组(蓝)、售后组(橙)、综合组(紫)、VIP组(粉)、质检组(黄)、支持组(青)
+
