@@ -1,3 +1,5 @@
 __pycache__/
 *.py[cod]
 *.db
+service_error*.log
+service_output*.log
