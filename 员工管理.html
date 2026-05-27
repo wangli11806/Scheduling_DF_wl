@@ -187,6 +187,7 @@
         <a class="nav-item" data-page="overview" href="总览.html">总览</a>
         <a class="nav-item" data-page="schedule" href="排班表.html">排班表</a>
         <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
+        <a class="nav-item" data-page="leave" href="调休管理.html">调休管理</a>
         <a class="nav-item active" data-page="employees">员工管理</a>
         <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
         <a class="nav-item" data-page="notify" href="通知设置.html">通知设置</a>
@@ -671,6 +672,10 @@
                 }
                 if(page === 'work') {
                     window.location.href = '工作安排.html';
+                    return;
+                }
+                if(page === 'leave') {
+                    window.location.href = '调休管理.html';
                     return;
                 }
                 if(page === 'notify') {
