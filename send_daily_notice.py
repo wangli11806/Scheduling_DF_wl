@@ -11,6 +11,12 @@ from datetime import date, datetime
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+# pythonw.exe 静默运行时没有控制台，stdout/stderr 为 None，需要重定向到空设备避免 print 报错
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notify_config.json")
 TEAM_ORDER = ["在线组", "热线组", "售后组", "综合组", "VIP组", "质检组", "支持组"]
 

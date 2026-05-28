@@ -3,3 +3,4 @@ __pycache__/
 *.db
 service_error*.log
 service_output*.log
+logs/

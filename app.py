@@ -15,6 +15,55 @@ from openpyxl.utils import get_column_letter
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schedule.db")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+# ==================== 日志管理 ====================
+
+class _Tee:
+    """同时写入文件和原始流"""
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, data):
+        for s in self._streams:
+            s.write(data)
+            s.flush()
+
+    def flush(self):
+        for s in self._streams:
+            s.flush()
+
+
+def _rotate_log(path):
+    """启动时轮转旧日志，追加时间戳后缀"""
+    if os.path.exists(path):
+        mtime = os.path.getmtime(path)
+        ts = datetime.fromtimestamp(mtime).strftime("%Y%m%dT%H%M%S")
+        base, ext = os.path.splitext(path)
+        rotated = f"{base}-{ts}{ext}"
+        try:
+            os.rename(path, rotated)
+        except OSError:
+            pass
+
+
+def setup_logging():
+    """将 stdout/stderr 重定向到 logs/ 子目录，同时保留控制台输出"""
+    log_dir = os.path.join(BASE_DIR, "logs")
+    out_dir = os.path.join(log_dir, "output")
+    err_dir = os.path.join(log_dir, "error")
+    os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(err_dir, exist_ok=True)
+
+    out_path = os.path.join(out_dir, "service_output.log")
+    err_path = os.path.join(err_dir, "service_error.log")
+
+    _rotate_log(out_path)
+    _rotate_log(err_path)
+
+    sys.stdout = _Tee(sys.__stdout__, open(out_path, "a", encoding="utf-8"))
+    sys.stderr = _Tee(sys.__stderr__, open(err_path, "a", encoding="utf-8"))
 
 
 def get_db():
@@ -933,12 +982,15 @@ def sync_all_scheduled_tasks(cfg):
 
 def _sync_windows_task(has_enabled, python_exe, script_path):
     import subprocess
+    pythonw_exe = os.path.join(os.path.dirname(python_exe), "pythonw.exe")
+    if not os.path.exists(pythonw_exe):
+        pythonw_exe = python_exe
     task_name = r"\排班系统\排班每日通知"
     if has_enabled:
         # 始终用 /create /f 覆盖，确保调度周期和命令行是最新的
         subprocess.run(
             ["schtasks", "/create", "/tn", task_name, "/sc", "minute", "/mo", "30", "/st", "00:00",
-             "/tr", f'"{python_exe}" "{script_path}" --check-and-send',
+             "/tr", f'"{pythonw_exe}" "{script_path}" --check-and-send',
              "/f"],
             capture_output=True, text=True
         )
@@ -1259,6 +1311,7 @@ def index():
 # ==================== 启动 ====================
 
 if __name__ == "__main__":
+    setup_logging()
     init_db()
     print("=" * 50)
     print("  客服排班系统后端已启动")
