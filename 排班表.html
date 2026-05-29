@@ -293,6 +293,29 @@
         .shift-tag.shift-请假 { background: #fff3e0; color: #bf360c; }
         .shift-tag.shift-none { background: #f5f5f5; color: #bdbdbd; }
 
+        /* 加班标记 */
+        .leave-badge {
+            position: relative; display: inline-block;
+            padding: 2px 7px; border-radius: 4px;
+            background: #ef4444; color: white; font-size: 0.72rem;
+            font-weight: 600; cursor: pointer; margin-left: 4px;
+            vertical-align: middle; line-height: 1.4;
+        }
+        .leave-badge:hover { background: #dc2626; }
+        .leave-tooltip {
+            display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
+            transform: translateX(-50%); background: #1e293b; color: white;
+            padding: 5px 12px; border-radius: 8px; font-size: 0.85rem;
+            white-space: nowrap; z-index: 100; font-weight: 500;
+            pointer-events: none;
+        }
+        .leave-tooltip::after {
+            content: ''; position: absolute; top: 100%; left: 50%;
+            transform: translateX(-50%); border: 6px solid transparent;
+            border-top-color: #1e293b;
+        }
+        .leave-badge:hover .leave-tooltip { display: block; }
+
         .emp-info { display: flex; flex-direction: column; align-items: center; gap: 3px; }
         .emp-name { font-weight: 600; font-size: 0.92rem; color: #1e293b; }
         .emp-team { font-weight: 600; font-size: 0.92rem; color: #1e293b; }
@@ -405,7 +428,7 @@
             </div>
         </div>
         <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
-        <a class="nav-item" data-page="leave" href="调休管理.html">调休管理</a>
+        <a class="nav-item" data-page="leave" href="加班管理.html">加班管理</a>
         <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
         <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
         <a class="nav-item" data-page="notify" href="通知设置.html">通知设置</a>
@@ -663,6 +686,22 @@
     let shiftOptions = [];
     let workShifts = [];
     let employees = [];
+    let leaveMap = new Map(); // key: `${date}|${employeeName}` → [{hours, start_time, end_time}, ...]
+
+    async function loadLeaveRecords() {
+        try {
+            const data = await apiGet('/leave-records');
+            leaveMap.clear();
+            data.forEach(r => {
+                const key = `${r.leave_date}|${r.employee_name}`;
+                if (!leaveMap.has(key)) leaveMap.set(key, []);
+                leaveMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time });
+            });
+        } catch (e) {
+            // leave-records API not available yet, ignore
+            leaveMap.clear();
+        }
+    }
 
     function getTeamOptions() {
         const ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
@@ -1100,7 +1139,15 @@
                             ${days.map(d => {
                                 let shiftVal = getShift(d.date, emp.name);
                                 let cls = getShiftClass(shiftVal);
-                                return `<td><span class="shift-tag ${cls}" data-shift="${shiftVal}">${shiftVal}</span></td>`;
+                                let leaveKey = `${d.date}|${emp.name}`;
+                                let leaveRecords = leaveMap.get(leaveKey);
+                                let leaveHtml = '';
+                                if (leaveRecords && leaveRecords.length > 0) {
+                                    let totalH = leaveRecords.reduce((s, r) => s + r.hours, 0);
+                                    let tooltipParts = leaveRecords.map(r => `加班${r.hours.toFixed(1)}h（${r.start_time}-${r.end_time}）`);
+                                    leaveHtml = `<span class="leave-badge" data-employee="${emp.name}" title="${tooltipParts.join('; ').replace(/"/g, '&quot;')}">加班<span class="leave-tooltip">${tooltipParts.join('<br>')}</span></span>`;
+                                }
+                                return `<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;"><span class="shift-tag ${cls}" data-shift="${shiftVal}">${shiftVal}</span>${leaveHtml}</div></td>`;
                             }).join('')}
                         </tr>
                     `).join('')}
@@ -1111,6 +1158,14 @@
     function renderCurrentView() {
         const container = document.getElementById("scheduleViewContainer");
         container.innerHTML = renderTableView(currentBaseDate);
+        // 加班标记点击跳转
+        container.querySelectorAll('.leave-badge').forEach(badge => {
+            badge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const empName = badge.getAttribute('data-employee');
+                window.location.href = `加班管理.html?employee=${encodeURIComponent(empName)}`;
+            });
+        });
         renderLegend();
         document.getElementById("filterShiftField").style.display = currentView === "day" ? "" : "none";
         if(currentView === "day") {
@@ -1357,6 +1412,7 @@
             shiftOptions = shiftData.shiftOptions;
             workShifts = shiftData.workShifts;
             await loadSchedules();
+            await loadLeaveRecords();
         } catch(e) {
             showToast('数据加载失败: ' + e.message);
         }
@@ -1492,7 +1548,7 @@
                 } else if(page === 'work') {
                     window.location.href = '工作安排.html';
                 } else if(page === 'leave') {
-                    window.location.href = '调休管理.html';
+                    window.location.href = '加班管理.html';
                 } else if(page === 'notify') {
                     window.location.href = '通知设置.html';
                 } else if(page === 'monthly-hours') {

@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>客服排班系统 - 加班管理</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        body {
+            background: #f1f5f9; margin: 0; padding: 0;
+            display: flex; min-height: 100vh;
+            font-size: 13px; color: #1e293b;
+        }
+
+        /* ===== 左侧菜单栏 ===== */
+        .sidebar {
+            width: 190px; min-width: 190px; background: #1e293b; color: #e2e8f0;
+            display: flex; flex-direction: column;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+            position: sticky; top: 0; height: 100vh; overflow-y: auto;
+        }
+        .sidebar-logo {
+            padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
+            font-size: 1.15rem; font-weight: 700; color: white; letter-spacing: 0.5px;
+        }
+        .sidebar-nav { padding: 8px 0; flex: 1; }
+        .sidebar-nav .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 13px 18px; margin: 3px 10px; border-radius: 10px;
+            font-size: 1rem; cursor: pointer; transition: all 0.15s;
+            color: #cbd5e1; text-decoration: none; user-select: none;
+        }
+        .sidebar-nav .nav-item:hover { background: rgba(255,255,255,0.06); color: white; }
+        .sidebar-nav .nav-item.active {
+            background: rgba(99, 102, 241, 0.25); color: #a5b4fc; font-weight: 600;
+        }
+
+        .nav-group .nav-group-toggle { cursor: pointer; }
+        .nav-group .nav-group-toggle::after { content: ' ▾'; font-size: 0.7rem; margin-left: auto; }
+        .nav-group.open .nav-group-toggle::after { content: ' ▴'; }
+        .nav-submenu { display: none; }
+        .nav-group.open .nav-submenu { display: block; }
+        .nav-sub-item { padding-left: 48px !important; font-size: 0.92rem !important; }
+
+        /* ===== 主内容区 ===== */
+        .main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .header-bar {
+            background: white; padding: 14px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            border-bottom: 1px solid #e8ecf1;
+        }
+        .header-bar h1 { font-size: 1.15rem; font-weight: 700; color: #1e293b; margin: 0; white-space: nowrap; }
+        .content-body { flex: 1; padding: 20px 28px; overflow-x: hidden; }
+
+        /* 筛选区域 */
+        .filter-area {
+            background: white; border-radius: 16px; padding: 16px 20px; margin-bottom: 16px;
+            display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03); border: 1px solid #e8ecf1;
+        }
+        .filter-field { display: flex; flex-direction: column; gap: 5px; }
+        .filter-field label { font-size: 0.92rem; font-weight: 600; color: #64748b; }
+        .filter-field input, .filter-field select {
+            padding: 8px 12px; border-radius: 10px; border: 1px solid #cbd5e1;
+            font-size: 0.92rem; background: white;
+        }
+        .filter-field .team-select { width: 280px; }
+        .filter-buttons { display: flex; gap: 10px; align-items: flex-end; margin-left: auto; }
+
+        /* 多选下拉 */
+        .multi-select { position: relative; user-select: none; }
+        .multi-select-trigger {
+            display: block; width: 280px;
+            height: 34px; padding: 0 10px; border: 1px solid #cbd5e1;
+            border-radius: 10px; background: white; cursor: pointer; font-size: 0.92rem;
+            transition: border-color 0.15s;
+            overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+            line-height: 32px;
+        }
+        .multi-select-trigger:hover { border-color: #94a3b8; }
+        .multi-select.open .multi-select-trigger { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.12); }
+        .ms-placeholder { color: #94a3b8; font-size: 0.92rem; }
+        .ms-dropdown {
+            display: none; position: fixed; z-index: 999;
+            background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-height: 280px;
+            overflow: hidden;
+        }
+        .multi-select.open .ms-dropdown { display: block; }
+        .ms-search { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 6px; align-items: center; }
+        .ms-search input {
+            flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px;
+            font-size: 0.92rem; outline: none;
+        }
+        .ms-search input:focus { border-color: #6366f1; }
+        .ms-select-all {
+            font-size: 0.85rem; color: #6366f1; cursor: pointer; white-space: nowrap;
+            padding: 5px 10px; border-radius: 6px; font-weight: 600;
+            border: 1px solid #c7d2fe; background: #eef2ff;
+        }
+        .ms-select-all:hover { background: #e0e7ff; }
+        .ms-options { max-height: 180px; overflow-y: auto; padding: 4px 0; }
+        .ms-option {
+            display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+            font-size: 0.92rem; cursor: pointer; transition: background 0.1s;
+        }
+        .ms-option:hover { background: #f8fafc; }
+        .ms-option input[type="checkbox"] { accent-color: #6366f1; }
+        .ms-actions {
+            display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid #e2e8f0;
+            justify-content: flex-end;
+        }
+
+        /* 月份选择器 */
+        .month-nav { display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 4px 12px; border-radius: 60px; }
+        .month-nav button {
+            background: none; border: none; font-size: 1.1rem; cursor: pointer;
+            width: 28px; height: 28px; border-radius: 30px; display: inline-flex;
+            align-items: center; justify-content: center; color: #475569;
+        }
+        .month-nav button:hover { background: #e2e8f0; }
+        .month-label {
+            font-weight: 600; background: white; padding: 4px 14px; border-radius: 40px;
+            font-size: 0.92rem; min-width: 130px; text-align: center;
+        }
+
+        /* 按钮 */
+        .btn {
+            background: white; border: 1px solid #cbd5e1; padding: 7px 18px;
+            border-radius: 40px; font-weight: 500; font-size: 0.92rem; cursor: pointer;
+            transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px;
+            color: #1e293b; white-space: nowrap;
+        }
+        .btn:hover { background: #f8fafc; border-color: #94a3b8; }
+        .btn-primary { background: #2c3e66; border-color: #2c3e66; color: white; }
+        .btn-primary:hover { background: #1e2f4a; }
+        .btn-danger { background: #ef4444; border-color: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-sm { padding: 5px 12px; font-size: 0.85rem; }
+
+        /* 操作栏 */
+        .action-bar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+        .action-bar .info-text { font-size: 0.85rem; color: #94a3b8; }
+
+        /* 表格 */
+        .table-wrapper {
+            overflow-x: auto; border-radius: 16px; background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid #edf2f7;
+        }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; min-width: 1100px; }
+        .data-table th {
+            background: #f9fbfd; padding: 12px 10px; border-bottom: 1px solid #e2e8f0;
+            font-weight: 700; color: #2c3e66; text-align: left; white-space: nowrap;
+        }
+        .data-table td {
+            border-bottom: 1px solid #f1f5f9; padding: 11px 10px;
+            vertical-align: middle; color: #334155;
+        }
+        .data-table tbody tr:hover { background: #fafcff; }
+        .data-table .actions-cell { display: flex; gap: 8px; }
+        .empty-row td { text-align: center; padding: 40px; color: #94a3b8; }
+
+        .team-badge {
+            display: inline-block; padding: 3px 10px; border-radius: 6px;
+            font-size: 0.85rem; font-weight: 500; background: #eef2ff; color: #3730a3;
+        }
+
+        /* 弹窗 */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.45); z-index: 900;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-dialog {
+            background: white; border-radius: 24px; padding: 32px; width: 520px; max-width: 92vw;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+        .modal-title { font-size: 1.15rem; font-weight: 600; color: #1e293b; margin-bottom: 24px; }
+        .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+        .modal-row label { font-size: 0.92rem; font-weight: 500; color: #475569; }
+        .modal-row input, .modal-row select, .modal-row textarea {
+            padding: 10px 14px; border-radius: 16px; border: 1px solid #cbd5e1;
+            background: white; font-size: 0.92rem; width: 100%;
+        }
+        .modal-row textarea { resize: vertical; min-height: 72px; }
+        .modal-row .required::after { content: " *"; color: #ef4444; }
+        .modal-row .char-count { font-size: 0.8rem; color: #94a3b8; text-align: right; margin-top: 2px; }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+
+        /* 提交人平铺选择 */
+        .submitter-options {
+            display: flex; flex-wrap: wrap; gap: 10px;
+        }
+        .submitter-opt {
+            padding: 8px 18px; border-radius: 12px; border: 1px solid #cbd5e1;
+            font-size: 0.92rem; cursor: pointer; transition: all 0.15s;
+            background: white; color: #475569; user-select: none;
+        }
+        .submitter-opt:hover { border-color: #6366f1; color: #3730a3; background: #eef2ff; }
+        .submitter-opt.selected {
+            background: #2c3e66; color: white; border-color: #2c3e66;
+        }
+
+        .toast-msg {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: #1e293b; color: white; padding: 10px 24px; border-radius: 60px;
+            font-size: 0.92rem; z-index: 1000; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+            transition: 0.2s; pointer-events: none;
+        }
+
+        @media (max-width: 860px) {
+            body { flex-direction: column; }
+            .sidebar {
+                width: 100%; min-width: auto; height: auto; position: relative;
+                flex-direction: row; flex-wrap: wrap; padding: 10px 14px; gap: 6px; align-items: center;
+            }
+            .sidebar-logo { padding: 0; border-bottom: none; }
+            .sidebar-nav { display: flex; padding: 0; gap: 4px; }
+            .sidebar-nav .nav-item { margin: 0; padding: 8px 12px; }
+            .header-bar { flex-direction: column; align-items: flex-start; }
+            .content-body { padding: 14px 12px; }
+            .filter-field { width: 100%; }
+            .filter-buttons { margin-left: 0; }
+            .modal-dialog { width: 96vw; padding: 24px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- 左侧菜单栏 -->
+<aside class="sidebar">
+    <div class="sidebar-logo">客服排班系统</div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" data-page="overview" href="总览.html">总览</a>
+        <div class="nav-group">
+            <div class="nav-item nav-group-toggle" data-page="schedule-group">排班表</div>
+            <div class="nav-submenu">
+                <a class="nav-item nav-sub-item" data-page="schedule" href="排班表.html">排班表</a>
+                <a class="nav-item nav-sub-item" data-page="raw-schedule" href="原始排班.html">原始排班</a>
+            </div>
+        </div>
+        <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
+        <a class="nav-item active" data-page="leave">加班管理</a>
+        <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
+        <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
+        <a class="nav-item" data-page="notify" href="通知设置.html">通知设置</a>
+        <div class="nav-group">
+            <div class="nav-item nav-group-toggle" data-page="stats">排班统计</div>
+            <div class="nav-submenu">
+                <a class="nav-item nav-sub-item" data-page="monthly-hours" href="月度时长统计.html">月度时长统计</a>
+            </div>
+        </div>
+    </nav>
+</aside>
+
+<!-- 主内容区 -->
+<div class="main-area">
+    <div class="header-bar">
+        <h1>加班管理</h1>
+    </div>
+
+    <div class="content-body">
+        <!-- 筛选区域 -->
+        <div class="filter-area">
+            <div class="filter-field">
+                <label>月份</label>
+                <div class="month-nav">
+                    <button id="prevMonthBtn">◀</button>
+                    <div class="month-label" id="monthLabel">2026年5月</div>
+                    <button id="nextMonthBtn">▶</button>
+                </div>
+            </div>
+            <div class="filter-field">
+                <label>所属团队</label>
+                <select id="filterTeam" class="team-select">
+                    <option value="">全部团队</option>
+                </select>
+            </div>
+            <div class="filter-field">
+                <label>员工姓名</label>
+                <div class="multi-select" id="filterEmployee">
+                    <div class="multi-select-trigger" id="filterEmployeeTrigger">
+                        <span class="ms-placeholder">全部员工</span>
+                    </div>
+                    <div class="ms-dropdown">
+                        <div class="ms-search">
+                            <input type="text" placeholder="搜索..." id="filterEmployeeSearch">
+                            <span class="ms-select-all" id="filterEmployeeAll">全选</span>
+                        </div>
+                        <div class="ms-options" id="filterEmployeeOptions"></div>
+                        <div class="ms-actions">
+                            <button class="btn btn-sm" id="filterEmployeeClear">清除</button>
+                            <button class="btn btn-sm btn-primary" id="filterEmployeeOk">确定</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-buttons">
+                <button class="btn" id="resetFilterBtn">重置</button>
+                <button class="btn btn-primary" id="queryBtn">查询</button>
+            </div>
+        </div>
+
+        <!-- 操作栏 -->
+        <div class="action-bar">
+            <button class="btn btn-primary" id="addRecordBtn">新增记录</button>
+            <button class="btn" id="exportBtn">导出Excel</button>
+            <span class="info-text" id="tableInfo">共 0 条记录</span>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>清单ID</th>
+                        <th>所属团队</th>
+                        <th>加班日期</th>
+                        <th>东福工号</th>
+                        <th>员工</th>
+                        <th>开始时间</th>
+                        <th>结束时间</th>
+                        <th>加班时长(h)</th>
+                        <th>备注</th>
+                        <th>提交人</th>
+                        <th>最后修改时间</th>
+                        <th style="text-align:center; min-width:120px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 新增/编辑弹窗 -->
+<div class="modal-overlay" id="recordModal">
+    <div class="modal-dialog">
+        <div class="modal-title" id="modalTitle">新增调休记录</div>
+        <div class="modal-row">
+            <label class="required">所属团队</label>
+            <select id="modalTeam">
+                <option value="">请选择团队</option>
+            </select>
+        </div>
+        <div class="modal-row">
+            <label class="required">员工</label>
+            <select id="modalEmployee">
+                <option value="">请先选择团队</option>
+            </select>
+        </div>
+        <div class="modal-row">
+            <label class="required">加班日期</label>
+            <input type="date" id="modalLeaveDate">
+        </div>
+        <div class="modal-row" style="flex-direction:row; gap:16px;">
+            <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+                <label class="required">加班开始时间</label>
+                <input type="time" id="modalStartTime">
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+                <label class="required">加班结束时间</label>
+                <input type="time" id="modalEndTime">
+            </div>
+        </div>
+        <div class="modal-row">
+            <label>备注 <span style="font-weight:400;color:#94a3b8;">（选填，最多200字）</span></label>
+            <textarea id="modalRemark" placeholder="请输入备注" maxlength="200"></textarea>
+            <div class="char-count"><span id="remarkCount">0</span>/200</div>
+        </div>
+        <div class="modal-row">
+            <label class="required">提交人</label>
+            <div class="submitter-options" id="modalSubmitterOptions"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn" id="modalCancelBtn">取消</button>
+            <button class="btn btn-primary" id="modalSaveBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认弹窗 -->
+<div class="modal-overlay" id="deleteModal">
+    <div class="modal-dialog" style="text-align:center;">
+        <div class="modal-title">确认删除</div>
+        <p style="font-size:0.92rem; color:#64748b; margin-bottom:8px;">
+            确定要删除 <strong id="deleteRecordInfo"></strong> 的调休记录吗？
+        </p>
+        <p style="font-size:0.85rem; color:#94a3b8;">此操作不可撤销</p>
+        <div class="modal-actions" style="justify-content:center;">
+            <button class="btn" id="deleteCancelBtn">取消</button>
+            <button class="btn btn-danger" id="deleteConfirmBtn">确认删除</button>
+        </div>
+    </div>
+</div>
+
+<div id="toastMsg" class="toast-msg" style="display: none;"></div>
+
+<script>
+    const API_BASE = '/api';
+    const teamOptions = ["在线组", "热线组", "售后组", "综合组", "VIP组", "质检组", "支持组"];
+
+    async function apiGet(url) {
+        const res = await fetch(API_BASE + url);
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '请求失败'); }
+        return res.json();
+    }
+    async function apiPost(url, data) {
+        const res = await fetch(API_BASE + url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
+    }
+    async function apiPut(url, data) {
+        const res = await fetch(API_BASE + url, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
+    }
+    async function apiDelete(url) {
+        const res = await fetch(API_BASE + url, { method:'DELETE' });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
+        return res.json();
+    }
+
+    let records = [];
+    let employees = [];
+    let filterTeam = '';
+    let filterMonth = '';
+    let filterEmployees = [];
+    let monthDisplay = new Date(); // 用于月份选择器导航
+
+    function getMonthStr(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    function updateMonthLabel() {
+        document.getElementById("monthLabel").textContent =
+            monthDisplay.getFullYear() + '年' + (monthDisplay.getMonth() + 1) + '月';
+    }
+
+    function getSupervisors() {
+        return employees.filter(e => e.position === '主管' && e.status === 'active');
+    }
+
+    function getEmployeesByTeam(team) {
+        return employees.filter(e => e.team === team && e.status === 'active');
+    }
+
+    function getFilteredRecords() {
+        return records.filter(r => {
+            const matchTeam = !filterTeam || r.team === filterTeam;
+            const matchMonth = !filterMonth || r.leave_date.startsWith(filterMonth);
+            const matchEmployee = filterEmployees.length === 0 || filterEmployees.includes(r.employee_name);
+            return matchTeam && matchMonth && matchEmployee;
+        });
+    }
+
+    async function loadRecords() {
+        const params = new URLSearchParams();
+        if (filterTeam) params.set('team', filterTeam);
+        if (filterMonth) params.set('month', filterMonth);
+        const qs = params.toString();
+        records = await apiGet('/leave-records' + (qs ? '?' + qs : ''));
+    }
+
+    async function loadEmployees() {
+        employees = await apiGet('/employees?status=active');
+    }
+
+    // ========== 渲染 ==========
+    function renderTeamFilter() {
+        const sel = document.getElementById("filterTeam");
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="">全部团队</option>' +
+            teamOptions.map(t => `<option value="${t}" ${filterTeam===t?'selected':''}>${t}</option>`).join('');
+        if (currentVal) sel.value = currentVal;
+    }
+
+    function renderTable() {
+        const filtered = getFilteredRecords();
+        const tbody = document.getElementById("tableBody");
+        document.getElementById("tableInfo").textContent = `共 ${filtered.length} 条记录`;
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="12">暂无调休记录</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(r => `
+            <tr>
+                <td style="font-weight:500; color:#6366f1;">${r.id}</td>
+                <td><span class="team-badge">${r.team}</span></td>
+                <td>${r.leave_date}</td>
+                <td>${r.dongfu_id || '<span style="color:#94a3b8;">-</span>'}</td>
+                <td style="font-weight:600;">${r.employee_name}</td>
+                <td>${r.start_time}</td>
+                <td>${r.end_time}</td>
+                <td style="font-weight:600;">${r.hours.toFixed(1)}</td>
+                <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${(r.remark || '').replace(/"/g, '&quot;')}">${r.remark || '<span style="color:#94a3b8;">-</span>'}</td>
+                <td>${r.submitter || '<span style="color:#94a3b8;">-</span>'}</td>
+                <td style="font-size:0.85rem; color:#64748b;">${r.updated_at || r.created_at || '-'}</td>
+                <td class="actions-cell" style="justify-content:center;">
+                    <button class="btn btn-sm edit-btn" data-id="${r.id}">编辑</button>
+                    <button class="btn btn-sm btn-danger delete-btn" data-id="${r.id}">删除</button>
+                </td>
+            </tr>
+        `).join('');
+
+        tbody.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', () => openEditModal(parseInt(btn.getAttribute('data-id'))));
+        });
+        tbody.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', () => openDeleteModal(parseInt(btn.getAttribute('data-id'))));
+        });
+    }
+
+    function refreshAll() {
+        renderTeamFilter();
+        renderTable();
+    }
+
+    // ========== 弹窗逻辑 ==========
+    let editingRecordId = null;
+
+    function renderTeamSelect(selectId, selectedVal) {
+        const sel = document.getElementById(selectId);
+        sel.innerHTML = '<option value="">请选择团队</option>' +
+            teamOptions.map(t => `<option value="${t}" ${selectedVal===t?'selected':''}>${t}</option>`).join('');
+    }
+
+    function renderEmployeeSelect(team) {
+        const sel = document.getElementById("modalEmployee");
+        if (!team) {
+            sel.innerHTML = '<option value="">请先选择团队</option>';
+            return;
+        }
+        const teamEmps = getEmployeesByTeam(team);
+        if (teamEmps.length === 0) {
+            sel.innerHTML = '<option value="">该团队无有效员工</option>';
+            return;
+        }
+        sel.innerHTML = '<option value="">请选择员工</option>' +
+            teamEmps.map(e => `<option value="${e.name}">${e.name}</option>`).join('');
+    }
+
+    function renderSubmitterOptions(selectedSubmitter) {
+        const container = document.getElementById("modalSubmitterOptions");
+        const supervisors = getSupervisors();
+        if (supervisors.length === 0) {
+            container.innerHTML = '<span style="color:#94a3b8; font-size:0.92rem;">暂无可选主管</span>';
+            return;
+        }
+        container.innerHTML = supervisors.map(s => {
+            const cls = (s.name === selectedSubmitter) ? 'submitter-opt selected' : 'submitter-opt';
+            return `<span class="${cls}" data-name="${s.name}">${s.name}</span>`;
+        }).join('');
+
+        container.querySelectorAll('.submitter-opt').forEach(opt => {
+            opt.addEventListener('click', () => {
+                container.querySelectorAll('.submitter-opt').forEach(o => o.classList.remove('selected'));
+                opt.classList.add('selected');
+            });
+        });
+    }
+
+    function getSelectedSubmitter() {
+        const selected = document.querySelector('#modalSubmitterOptions .submitter-opt.selected');
+        return selected ? selected.getAttribute('data-name') : '';
+    }
+
+    function openAddModal() {
+        editingRecordId = null;
+        document.getElementById("modalTitle").textContent = "新增调休记录";
+        renderTeamSelect("modalTeam", "");
+        document.getElementById("modalLeaveDate").value = new Date().toISOString().slice(0, 10);
+        document.getElementById("modalEmployee").innerHTML = '<option value="">请先选择团队</option>';
+        document.getElementById("modalStartTime").value = "";
+        document.getElementById("modalEndTime").value = "";
+        document.getElementById("modalRemark").value = "";
+        document.getElementById("remarkCount").textContent = "0";
+        renderSubmitterOptions("");
+        document.getElementById("recordModal").classList.add("active");
+    }
+
+    function openEditModal(recordId) {
+        const record = records.find(r => r.id === recordId);
+        if (!record) return;
+        editingRecordId = recordId;
+        document.getElementById("modalTitle").textContent = "编辑调休记录";
+        renderTeamSelect("modalTeam", record.team);
+        document.getElementById("modalLeaveDate").value = record.leave_date;
+        renderEmployeeSelect(record.team);
+        document.getElementById("modalEmployee").value = record.employee_name;
+        document.getElementById("modalStartTime").value = record.start_time;
+        document.getElementById("modalEndTime").value = record.end_time;
+        document.getElementById("modalRemark").value = record.remark || "";
+        document.getElementById("remarkCount").textContent = (record.remark || "").length;
+        renderSubmitterOptions(record.submitter);
+        document.getElementById("recordModal").classList.add("active");
+    }
+
+    function closeRecordModal() {
+        document.getElementById("recordModal").classList.remove("active");
+    }
+
+    async function saveRecord() {
+        const team = document.getElementById("modalTeam").value;
+        const leaveDate = document.getElementById("modalLeaveDate").value;
+        const employeeName = document.getElementById("modalEmployee").value;
+        const startTime = document.getElementById("modalStartTime").value;
+        const endTime = document.getElementById("modalEndTime").value;
+        const remark = document.getElementById("modalRemark").value.trim();
+        const submitter = getSelectedSubmitter();
+
+        if (!team) { showToast("请选择所属团队"); return; }
+        if (!leaveDate) { showToast("请选择加班日期"); return; }
+        if (!employeeName) { showToast("请选择员工"); return; }
+        if (!startTime) { showToast("请选择加班开始时间"); return; }
+        if (!endTime) { showToast("请选择加班结束时间"); return; }
+        if (!submitter) { showToast("请选择提交人"); return; }
+        if (remark.length > 200) { showToast("备注不能超过200字符"); return; }
+
+        const data = { team, leaveDate, employeeName, startTime, endTime, remark, submitter };
+
+        try {
+            if (editingRecordId) {
+                await apiPut('/leave-records/' + editingRecordId, data);
+                showToast("调休记录已更新");
+            } else {
+                await apiPost('/leave-records', data);
+                showToast("调休记录已创建");
+            }
+            closeRecordModal();
+            await loadRecords();
+            refreshAll();
+        } catch (e) {
+            showToast(e.message);
+        }
+    }
+
+    // 删除
+    let deleteTargetId = null;
+
+    function openDeleteModal(recordId) {
+        deleteTargetId = recordId;
+        const record = records.find(r => r.id === recordId);
+        document.getElementById("deleteRecordInfo").textContent = record
+            ? `${record.employee_name} ${record.leave_date}`
+            : '';
+        document.getElementById("deleteModal").classList.add("active");
+    }
+
+    function closeDeleteModal() {
+        document.getElementById("deleteModal").classList.remove("active");
+        deleteTargetId = null;
+    }
+
+    async function confirmDelete() {
+        if (!deleteTargetId) return;
+        try {
+            await apiDelete('/leave-records/' + deleteTargetId);
+            await loadRecords();
+            closeDeleteModal();
+            refreshAll();
+            showToast("记录已删除");
+        } catch (e) {
+            showToast(e.message);
+        }
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById("toastMsg");
+        toast.innerText = msg;
+        toast.style.display = "block";
+        setTimeout(() => { toast.style.display = "none"; }, 2500);
+    }
+
+    // ========== 多选下拉组件 ==========
+    function initMultiSelect(config) {
+        const { containerId, triggerId, searchId, selectAllId, optionsId, clearId, okId, getOptions, getSelected, setSelected, placeholder } = config;
+        const container = document.getElementById(containerId);
+        const trigger = document.getElementById(triggerId);
+        const searchInput = document.getElementById(searchId);
+        const selectAllBtn = document.getElementById(selectAllId);
+        const optionsContainer = document.getElementById(optionsId);
+
+        function renderTrigger() {
+            const sel = getSelected();
+            const allOpts = getOptions();
+            if (sel.length === 0) {
+                trigger.innerHTML = `<span class="ms-placeholder">${placeholder || '请选择'}</span>`;
+            } else if (sel.length === allOpts.length && allOpts.length > 0) {
+                trigger.innerHTML = `<span class="ms-placeholder" style="color:#3730a3;font-weight:500;">全部 (${allOpts.length})</span>`;
+            } else {
+                trigger.textContent = sel.join('、');
+                trigger.title = sel.join('、');
+            }
+        }
+
+        function renderDropdown() {
+            const sel = getSelected();
+            const q = searchInput.value.toLowerCase();
+            const allOpts = getOptions();
+            const opts = allOpts.filter(o => o.toLowerCase().includes(q));
+            if (sel.length === allOpts.length && allOpts.length > 0) {
+                selectAllBtn.textContent = '取消全选';
+            } else {
+                selectAllBtn.textContent = '全选';
+            }
+            optionsContainer.innerHTML = opts.map(o => {
+                const checked = sel.includes(o) ? 'checked' : '';
+                return `<label class="ms-option"><input type="checkbox" value="${o}" ${checked}> ${o}</label>`;
+            }).join('');
+            if (opts.length === 0) {
+                optionsContainer.innerHTML = `<div style="padding:16px;text-align:center;color:#94a3b8;">无匹配选项</div>`;
+            }
+            optionsContainer.querySelectorAll('input').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    if (cb.checked) setSelected([...getSelected(), cb.value]);
+                    else setSelected(getSelected().filter(v => v !== cb.value));
+                    renderTrigger();
+                    if (config.onChange) config.onChange();
+                });
+            });
+        }
+
+        const dropdown = container.querySelector('.ms-dropdown');
+
+        function positionDropdown() {
+            const rect = trigger.getBoundingClientRect();
+            const dropdownH = dropdown.scrollHeight || 280;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const spaceAbove = rect.top;
+            if (spaceBelow < dropdownH && spaceAbove > spaceBelow) {
+                dropdown.style.top = Math.max(0, rect.top - Math.min(dropdownH, 280) - 4) + 'px';
+            } else {
+                dropdown.style.top = Math.min(rect.bottom + 4, window.innerHeight - Math.min(dropdownH, 280)) + 'px';
+            }
+            dropdown.style.left = Math.min(rect.left, window.innerWidth - 260) + 'px';
+            dropdown.style.width = Math.max(rect.width, 200) + 'px';
+        }
+
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = container.classList.contains('open');
+            document.querySelectorAll('.multi-select.open').forEach(ms => ms.classList.remove('open'));
+            if (!isOpen) {
+                container.classList.add('open');
+                searchInput.value = '';
+                renderDropdown();
+                positionDropdown();
+                setTimeout(() => searchInput.focus(), 50);
+            }
+        });
+
+        searchInput.addEventListener('input', renderDropdown);
+        searchInput.addEventListener('click', e => e.stopPropagation());
+
+        selectAllBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const allOpts = getOptions();
+            if (getSelected().length === allOpts.length && allOpts.length > 0) {
+                setSelected([]);
+            } else {
+                setSelected([...allOpts]);
+            }
+            renderTrigger();
+            renderDropdown();
+            if (config.onChange) config.onChange();
+        });
+
+        document.getElementById(clearId).addEventListener('click', () => {
+            setSelected([]);
+            renderTrigger();
+            renderDropdown();
+            if (config.onChange) config.onChange();
+        });
+
+        document.getElementById(okId).addEventListener('click', () => {
+            container.classList.remove('open');
+        });
+
+        document.addEventListener('click', () => {
+            container.classList.remove('open');
+        });
+
+        renderTrigger();
+        return { renderTrigger, renderDropdown };
+    }
+
+    function getEmployeeNames() { return employees.map(e => e.name); }
+
+    // ========== 初始化 ==========
+    async function init() {
+        filterMonth = getMonthStr(monthDisplay);
+        updateMonthLabel();
+
+        // 读取 URL 参数：?employee=张三
+        const urlParams = new URLSearchParams(window.location.search);
+        const empParam = urlParams.get('employee');
+        if (empParam) {
+            filterEmployees = empParam.split(',').map(s => s.trim()).filter(Boolean);
+        }
+
+        try {
+            await Promise.all([loadEmployees(), loadRecords()]);
+        } catch (e) {
+            showToast("数据加载失败: " + e.message);
+        }
+
+        // 初始化员工多选下拉
+        initMultiSelect({
+            containerId: 'filterEmployee', triggerId: 'filterEmployeeTrigger',
+            searchId: 'filterEmployeeSearch', selectAllId: 'filterEmployeeAll',
+            optionsId: 'filterEmployeeOptions', clearId: 'filterEmployeeClear',
+            okId: 'filterEmployeeOk', placeholder: '全部员工',
+            getOptions: () => getEmployeeNames(),
+            getSelected: () => filterEmployees,
+            setSelected: (v) => { filterEmployees = v; }
+        });
+        refreshAll();
+
+        document.getElementById("addRecordBtn").addEventListener("click", openAddModal);
+
+        document.getElementById("exportBtn").addEventListener("click", () => {
+            const params = new URLSearchParams();
+            if (filterTeam) params.set('team', filterTeam);
+            if (filterMonth) params.set('month', filterMonth);
+            if (filterEmployees.length > 0) params.set('employees', filterEmployees.join(','));
+            const qs = params.toString();
+            window.open('/api/leave-records/export' + (qs ? '?' + qs : ''), '_blank');
+        });
+
+        document.getElementById("resetFilterBtn").addEventListener("click", async () => {
+            filterTeam = '';
+            filterMonth = '';
+            filterEmployees = [];
+            document.getElementById("filterTeam").value = '';
+            monthDisplay = new Date();
+            updateMonthLabel();
+            document.getElementById("filterEmployeeTrigger").innerHTML = '<span class="ms-placeholder">全部员工</span>';
+            await loadRecords();
+            refreshAll();
+            showToast("筛选条件已重置");
+        });
+
+        document.getElementById("queryBtn").addEventListener("click", async () => {
+            filterTeam = document.getElementById("filterTeam").value;
+            filterMonth = getMonthStr(monthDisplay);
+            await loadRecords();
+            renderTable();
+            showToast("筛选完成");
+        });
+
+        // 月份选择器导航
+        document.getElementById("prevMonthBtn").addEventListener("click", () => {
+            monthDisplay.setMonth(monthDisplay.getMonth() - 1);
+            updateMonthLabel();
+        });
+        document.getElementById("nextMonthBtn").addEventListener("click", () => {
+            monthDisplay.setMonth(monthDisplay.getMonth() + 1);
+            updateMonthLabel();
+        });
+
+        // 弹窗事件
+        document.getElementById("modalCancelBtn").addEventListener("click", closeRecordModal);
+        document.getElementById("modalSaveBtn").addEventListener("click", saveRecord);
+        document.getElementById("recordModal").addEventListener("click", (e) => {
+            if (e.target === document.getElementById("recordModal")) closeRecordModal();
+        });
+
+        document.getElementById("deleteCancelBtn").addEventListener("click", closeDeleteModal);
+        document.getElementById("deleteConfirmBtn").addEventListener("click", confirmDelete);
+        document.getElementById("deleteModal").addEventListener("click", (e) => {
+            if (e.target === document.getElementById("deleteModal")) closeDeleteModal();
+        });
+
+        // 团队变更时更新员工下拉
+        document.getElementById("modalTeam").addEventListener("change", function() {
+            renderEmployeeSelect(this.value);
+            document.getElementById("modalEmployee").value = "";
+        });
+
+        // 备注字数统计
+        document.getElementById("modalRemark").addEventListener("input", function() {
+            document.getElementById("remarkCount").textContent = this.value.length;
+        });
+
+        // 侧栏导航
+        document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const page = item.getAttribute('data-page');
+                if (page === 'schedule-group') {
+                    item.closest('.nav-group').classList.toggle('open');
+                    return;
+                }
+                if (page === 'leave') return;
+                if (page === 'overview') { window.location.href = '总览.html'; return; }
+                if (page === 'raw-schedule') { window.location.href = '原始排班.html'; return; }
+                if (page === 'schedule') { window.location.href = '排班表.html'; return; }
+                if (page === 'shifts') { window.location.href = '班次设置.html'; return; }
+                if (page === 'work') { window.location.href = '工作安排.html'; return; }
+                if (page === 'employees') { window.location.href = '员工管理.html'; return; }
+                if (page === 'notify') { window.location.href = '通知设置.html'; return; }
+                if (page === 'monthly-hours') { window.location.href = '月度时长统计.html'; return; }
+                if (page === 'stats') { item.closest('.nav-group').classList.toggle('open'); return; }
+                e.preventDefault();
+                showToast('该页面尚未开通，敬请期待');
+            });
+        });
+    }
+    init();
+</script>
+</body>
+</html>
