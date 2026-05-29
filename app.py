@@ -153,10 +153,35 @@ def init_db():
             hours          REAL DEFAULT 0,
             remark         TEXT DEFAULT '',
             submitter      TEXT DEFAULT '',
+            deduction      REAL DEFAULT 0,
             created_at     TEXT DEFAULT (datetime('now','localtime')),
             updated_at     TEXT DEFAULT (datetime('now','localtime'))
         );
         CREATE INDEX IF NOT EXISTS idx_leave_records_date ON leave_records(leave_date);
+    """)
+    # 兼容旧表：新增 deduction 列
+    try:
+        db.execute("ALTER TABLE leave_records ADD COLUMN deduction REAL DEFAULT 0")
+    except:
+        pass
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS swap_records (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            swap_type      TEXT NOT NULL,
+            person_a       TEXT NOT NULL,
+            team_a         TEXT DEFAULT '',
+            date_a         TEXT NOT NULL,
+            shift_a        TEXT DEFAULT '',
+            person_b       TEXT NOT NULL,
+            team_b         TEXT DEFAULT '',
+            date_b         TEXT NOT NULL,
+            shift_b        TEXT DEFAULT '',
+            remark         TEXT DEFAULT '',
+            operator       TEXT DEFAULT '',
+            created_at     TEXT DEFAULT (datetime('now','localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_swap_records_date_a ON swap_records(date_a);
+        CREATE INDEX IF NOT EXISTS idx_swap_records_date_b ON swap_records(date_b);
         CREATE INDEX IF NOT EXISTS idx_leave_records_team ON leave_records(team);
     """)
     db.commit()
@@ -545,6 +570,25 @@ def api_schedules_list():
             "SELECT schedule_date, employee_name, shift_name FROM schedules ORDER BY schedule_date, employee_name"
         ).fetchall()
     return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/schedule/lookup", methods=["GET"])
+def api_schedule_lookup():
+    """查询某员工在某日期的班次信息"""
+    employee = request.args.get("employee", "").strip()
+    date = request.args.get("date", "").strip()
+    if not employee or not date:
+        return jsonify({"error": "缺少employee或date参数"}), 400
+    db = get_db()
+    row = db.execute(
+        "SELECT s.shift_name, sh.start_time, sh.end_time FROM schedules s "
+        "LEFT JOIN shifts sh ON sh.name = s.shift_name "
+        "WHERE s.schedule_date = ? AND s.employee_name = ?",
+        (date, employee)
+    ).fetchone()
+    if not row:
+        return jsonify({"shift_name": None, "start_time": None, "end_time": None})
+    return jsonify(dict(row))
 
 
 @app.route("/api/schedules/batch", methods=["POST"])
@@ -1130,7 +1174,7 @@ def api_assignments_save():
     return jsonify({"ok": True, "updated": count})
 
 
-# ==================== 调休管理 API ====================
+# ==================== 加班换班 API ====================
 
 def _calc_leave_hours(start_time, end_time):
     """计算加班时长（小时），支持跨天"""
@@ -1157,7 +1201,7 @@ def api_leave_records_list():
     if month:
         sql += " AND leave_date LIKE ?"
         params.append(month + "%")
-    sql += " ORDER BY leave_date DESC, id DESC"
+    sql += " ORDER BY id DESC"
     rows = db.execute(sql, params).fetchall()
     return jsonify([dict(r) for r in rows])
 
@@ -1172,6 +1216,10 @@ def api_leave_records_create():
     end_time = (data.get("endTime") or "").strip()
     remark = (data.get("remark") or "").strip()
     submitter = (data.get("submitter") or "").strip()
+    deduction = data.get("deduction", 0)
+    if deduction is None:
+        deduction = 0
+    deduction = float(deduction)
 
     if not team:
         return jsonify({"error": "请选择所属团队"}), 400
@@ -1185,16 +1233,18 @@ def api_leave_records_create():
         return jsonify({"error": "请选择加班结束时间"}), 400
     if len(remark) > 200:
         return jsonify({"error": "备注不能超过200字符"}), 400
+    if deduction < 0 or deduction > 8:
+        return jsonify({"error": "扣除时长范围0~8小时"}), 400
 
     db = get_db()
     emp = db.execute("SELECT dongfu_id FROM employees WHERE name=?", (employee_name,)).fetchone()
     dongfu_id = emp["dongfu_id"] if emp else ""
 
-    hours = _calc_leave_hours(start_time, end_time)
+    hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
 
     db.execute(
-        "INSERT INTO leave_records(team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter) VALUES(?,?,?,?,?,?,?,?,?)",
-        (team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter)
+        "INSERT INTO leave_records(team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction)
     )
     db.commit()
     row = db.execute("SELECT * FROM leave_records WHERE id=last_insert_rowid()").fetchone()
@@ -1216,20 +1266,26 @@ def api_leave_records_update(record_id):
     end_time = (data.get("endTime") or "").strip()
     remark = (data.get("remark") or "").strip()
     submitter = (data.get("submitter") or "").strip()
+    deduction = data.get("deduction", 0)
+    if deduction is None:
+        deduction = 0
+    deduction = float(deduction)
 
     if not team or not leave_date or not employee_name or not start_time or not end_time:
         return jsonify({"error": "必填字段不能为空"}), 400
     if len(remark) > 200:
         return jsonify({"error": "备注不能超过200字符"}), 400
+    if deduction < 0 or deduction > 8:
+        return jsonify({"error": "扣除时长范围0~8小时"}), 400
 
     emp = db.execute("SELECT dongfu_id FROM employees WHERE name=?", (employee_name,)).fetchone()
     dongfu_id = emp["dongfu_id"] if emp else ""
 
-    hours = _calc_leave_hours(start_time, end_time)
+    hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
 
     db.execute(
-        "UPDATE leave_records SET team=?, leave_date=?, dongfu_id=?, employee_name=?, start_time=?, end_time=?, hours=?, remark=?, submitter=?, updated_at=datetime('now','localtime') WHERE id=?",
-        (team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, record_id)
+        "UPDATE leave_records SET team=?, leave_date=?, dongfu_id=?, employee_name=?, start_time=?, end_time=?, hours=?, remark=?, submitter=?, deduction=?, updated_at=datetime('now','localtime') WHERE id=?",
+        (team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction, record_id)
     )
     db.commit()
     row = db.execute("SELECT * FROM leave_records WHERE id=?", (record_id,)).fetchone()
@@ -1268,7 +1324,7 @@ def api_leave_records_export():
             placeholders = ",".join("?" for _ in names)
             sql += f" AND employee_name IN ({placeholders})"
             params.extend(names)
-    sql += " ORDER BY leave_date DESC, id DESC"
+    sql += " ORDER BY id DESC"
     rows = db.execute(sql, params).fetchall()
 
     wb = Workbook()
@@ -1317,6 +1373,170 @@ def api_leave_records_export():
     tmp.close()
     return send_file(tmp.name, as_attachment=True, download_name="调休记录导出.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ==================== 换班/换休 API ====================
+
+@app.route("/api/swap-records", methods=["GET"])
+def api_swap_records_list():
+    team = request.args.get("team", "").strip()
+    month = request.args.get("month", "").strip()
+    db = get_db()
+    sql = "SELECT * FROM swap_records WHERE 1=1"
+    params = []
+    if team:
+        sql += " AND (team_a = ? OR team_b = ?)"
+        params.extend([team, team])
+    if month:
+        sql += " AND (date_a LIKE ? OR date_b LIKE ?)"
+        params.extend([month + "%", month + "%"])
+    sql += " ORDER BY id DESC"
+    rows = db.execute(sql, params).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/swap-records", methods=["POST"])
+def api_swap_records_create():
+    data = request.json
+    swap_type = (data.get("swapType") or "").strip()
+    person_a = (data.get("personA") or "").strip()
+    date_a = (data.get("dateA") or "").strip()
+    person_b = (data.get("personB") or "").strip()
+    date_b = (data.get("dateB") or "").strip()
+    remark = (data.get("remark") or "").strip()
+    operator = (data.get("operator") or "").strip()
+
+    if swap_type not in ("shift_swap", "rest_swap"):
+        return jsonify({"error": "无效的换班类型"}), 400
+    if not person_a or not date_a:
+        return jsonify({"error": "请选择换班人和日期"}), 400
+    if not person_b or not date_b:
+        return jsonify({"error": "请选择交换人和日期"}), 400
+    if not remark:
+        return jsonify({"error": "请填写备注"}), 400
+    if len(remark) > 200:
+        return jsonify({"error": "备注不能超过200字符"}), 400
+    if not operator:
+        return jsonify({"error": "请选择操作人"}), 400
+
+    db = get_db()
+
+    # 查询两个日期上两人的排班
+    row_a1 = db.execute(
+        "SELECT shift_name FROM schedules WHERE schedule_date=? AND employee_name=?",
+        (date_a, person_a)
+    ).fetchone()
+    row_a2 = db.execute(
+        "SELECT shift_name FROM schedules WHERE schedule_date=? AND employee_name=?",
+        (date_b, person_a)
+    ).fetchone()
+    row_b1 = db.execute(
+        "SELECT shift_name FROM schedules WHERE schedule_date=? AND employee_name=?",
+        (date_a, person_b)
+    ).fetchone()
+    row_b2 = db.execute(
+        "SELECT shift_name FROM schedules WHERE schedule_date=? AND employee_name=?",
+        (date_b, person_b)
+    ).fetchone()
+
+    if not row_a1:
+        return jsonify({"error": f"{person_a} 在 {date_a} 无排班记录"}), 400
+    if not row_b2:
+        return jsonify({"error": f"{person_b} 在 {date_b} 无排班记录"}), 400
+
+    # 查询团队
+    emp_a = db.execute("SELECT team FROM employees WHERE name=?", (person_a,)).fetchone()
+    team_a = emp_a["team"] if emp_a else ""
+
+    def _upsert_shift(date, emp, shift):
+        db.execute(
+            "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) "
+            "ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
+            (date, emp, shift)
+        )
+
+    if person_a == person_b:
+        # 自换：同一人两个日期互换
+        if not row_a2:
+            return jsonify({"error": f"{person_a} 在 {date_b} 无排班记录"}), 400
+        a1_old = row_a1["shift_name"]
+        a2_old = row_a2["shift_name"]
+        team_b = team_a
+
+        _upsert_shift(date_a, person_a, a2_old)
+        _upsert_shift(date_b, person_a, a1_old)
+
+        cur = db.execute(
+            "INSERT INTO swap_records(swap_type, person_a, team_a, date_a, shift_a, person_b, team_b, date_b, shift_b, remark, operator) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (swap_type, person_a, team_a, date_a, a1_old, person_a, team_a, date_b, a2_old, remark, operator)
+        )
+        swap_id = cur.lastrowid
+
+        if swap_type == "rest_swap":
+            _create_rest_overtime(db, person_a, team_a, date_a, a1_old, a2_old, person_a, operator, remark)
+            _create_rest_overtime(db, person_a, team_a, date_b, a2_old, a1_old, person_a, operator, remark)
+    else:
+        # 互换算两人在两个日期上的班次
+        a1_old = row_a1["shift_name"]
+        a2_old = row_a2["shift_name"] if row_a2 else "休息"
+        b1_old = row_b1["shift_name"] if row_b1 else "休息"
+        b2_old = row_b2["shift_name"]
+
+        emp_b = db.execute("SELECT team FROM employees WHERE name=?", (person_b,)).fetchone()
+        team_b = emp_b["team"] if emp_b else ""
+
+        _upsert_shift(date_a, person_a, b1_old)
+        _upsert_shift(date_a, person_b, a1_old)
+        _upsert_shift(date_b, person_a, b2_old)
+        _upsert_shift(date_b, person_b, a2_old)
+
+        cur = db.execute(
+            "INSERT INTO swap_records(swap_type, person_a, team_a, date_a, shift_a, person_b, team_b, date_b, shift_b, remark, operator) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (swap_type, person_a, team_a, date_a, a1_old, person_b, team_b, date_b, b2_old, remark, operator)
+        )
+        swap_id = cur.lastrowid
+
+        if swap_type == "rest_swap":
+            _create_rest_overtime(db, person_a, team_a, date_a, a1_old, b1_old, person_b, operator)
+            _create_rest_overtime(db, person_a, team_a, date_b, a2_old, b2_old, person_b, operator)
+            _create_rest_overtime(db, person_b, team_b, date_a, b1_old, a1_old, person_a, operator)
+            _create_rest_overtime(db, person_b, team_b, date_b, b2_old, a2_old, person_a, operator)
+
+    db.commit()
+    row = db.execute("SELECT * FROM swap_records WHERE id=?", (swap_id,)).fetchone()
+    return jsonify(dict(row)), 201
+
+
+def _create_rest_overtime(db, employee, team, date, old_shift, new_shift, other_person, operator, remark=None):
+    """如果员工原班次是休息、新班次是工作，创建一条加班记录"""
+    if old_shift not in ("休息", "放休", "请假"):
+        return
+    if new_shift in ("休息", "放休", "请假", ""):
+        return
+
+    shift = db.execute(
+        "SELECT start_time, end_time, work_hours FROM shifts WHERE name=?",
+        (new_shift,)
+    ).fetchone()
+    if not shift or not shift["start_time"] or not shift["end_time"]:
+        return
+
+    start_time = shift["start_time"]
+    end_time = shift["end_time"]
+    hours = shift["work_hours"] if shift["work_hours"] else _calc_leave_hours(start_time, end_time)
+
+    emp = db.execute("SELECT dongfu_id FROM employees WHERE name=?", (employee,)).fetchone()
+    dongfu_id = emp["dongfu_id"] if emp else ""
+
+    overtime_remark = remark if remark else f"与{other_person}换班"
+
+    db.execute(
+        "INSERT INTO leave_records(team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter) "
+        "VALUES(?,?,?,?,?,?,?,?,?)",
+        (team, date, dongfu_id, employee, start_time, end_time, hours, overtime_remark, operator)
+    )
 
 
 # ==================== 辅助函数 ====================
@@ -2042,13 +2262,13 @@ if __name__ == "__main__":
     init_db()
     print("=" * 50)
     print("  客服排班系统后端已启动")
-    print("  打开浏览器访问: http://127.0.0.1:5000")
+    print("  打开浏览器访问: http://127.0.0.1:5001")
     print("=" * 50)
     try:
         from waitress import serve
         print("  使用 waitress 生产服务器")
-        serve(app, host="0.0.0.0", port=5000, threads=4)
+        serve(app, host="0.0.0.0", port=5001, threads=4)
     except ImportError:
         print("  waitress 未安装，使用开发服务器")
         print("  建议执行: pip install waitress")
-        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+        app.run(host="0.0.0.0", port=5001, debug=False, threaded=True)

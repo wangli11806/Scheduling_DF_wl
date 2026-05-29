@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>客服排班系统 - 加班管理</title>
+    <title>客服排班系统 - 加班换班</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
@@ -144,6 +144,13 @@
         .action-bar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
         .action-bar .info-text { font-size: 0.85rem; color: #94a3b8; }
 
+        /* 区块标题 */
+        .section-title {
+            font-size: 1.05rem; font-weight: 700; color: #1e293b;
+            margin-bottom: 12px; display: flex; align-items: center; gap: 12px;
+        }
+        .section-title .info-text { font-size: 0.85rem; color: #94a3b8; font-weight: 400; }
+
         /* 表格 */
         .table-wrapper {
             overflow-x: auto; border-radius: 16px; background: white;
@@ -204,12 +211,39 @@
             background: #2c3e66; color: white; border-color: #2c3e66;
         }
 
+        /* 开关样式 */
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background: #cbd5e1; border-radius: 24px; transition: 0.2s;
+        }
+        .toggle-slider:before {
+            content: ""; position: absolute; height: 18px; width: 18px;
+            left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: #2c3e66; }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+        .deduction-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+        .deduction-row label { font-size: 0.92rem; color: #475569; white-space: nowrap; }
+        .deduction-row input[type="number"] {
+            width: 100px; padding: 6px 10px; border-radius: 10px; border: 1px solid #cbd5e1;
+            font-size: 0.92rem; text-align: center;
+        }
+        .deduction-row input[type="number"]:focus { border-color: #6366f1; outline: none; }
+
         .toast-msg {
             position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
             background: #1e293b; color: white; padding: 10px 24px; border-radius: 60px;
             font-size: 0.92rem; z-index: 1000; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
             transition: 0.2s; pointer-events: none;
         }
+
+        .swap-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+        .swap-table th { background: #f9fbfd; padding: 10px 12px; font-size: 0.92rem; font-weight: 600; color: #2c3e66; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        .swap-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .swap-table select, .swap-table input[type="date"] { width: 100%; padding: 7px 10px; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 0.92rem; }
+        .swap-table .shift-info { min-width: 120px; font-size: 0.92rem; color: #475569; }
 
         @media (max-width: 860px) {
             body { flex-direction: column; }
@@ -243,7 +277,7 @@
             </div>
         </div>
         <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
-        <a class="nav-item active" data-page="leave">加班管理</a>
+        <a class="nav-item active" data-page="leave">加班换班</a>
         <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
         <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
         <a class="nav-item" data-page="notify" href="通知设置.html">通知设置</a>
@@ -259,7 +293,7 @@
 <!-- 主内容区 -->
 <div class="main-area">
     <div class="header-bar">
-        <h1>加班管理</h1>
+        <h1>加班换班</h1>
     </div>
 
     <div class="content-body">
@@ -306,21 +340,23 @@
 
         <!-- 操作栏 -->
         <div class="action-bar">
-            <button class="btn btn-primary" id="addRecordBtn">新增记录</button>
+            <button class="btn btn-primary" id="addRecordBtn">加班申请</button>
+            <button class="btn btn-primary" id="swapShiftBtn">换班申请</button>
+            <button class="btn btn-primary" id="swapRestBtn">换休申请</button>
             <button class="btn" id="exportBtn">导出Excel</button>
-            <span class="info-text" id="tableInfo">共 0 条记录</span>
         </div>
 
-        <!-- 数据表格 -->
+        <!-- 加班明细 -->
+        <div class="section-title">加班明细 <span class="info-text" id="tableInfo">共 0 条记录</span></div>
         <div class="table-wrapper">
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>清单ID</th>
+                        <th>ID</th>
                         <th>所属团队</th>
-                        <th>加班日期</th>
                         <th>东福工号</th>
                         <th>员工</th>
+                        <th>加班日期</th>
                         <th>开始时间</th>
                         <th>结束时间</th>
                         <th>加班时长(h)</th>
@@ -333,13 +369,38 @@
                 <tbody id="tableBody"></tbody>
             </table>
         </div>
+
+        <!-- 换班/换休记录 -->
+        <div class="section-title" style="margin-top: 28px;">换班/换休记录 <span class="info-text" id="swapTableInfo">共 0 条</span></div>
+        <div class="table-wrapper">
+            <table class="data-table" style="min-width:1400px;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>类型</th>
+                        <th>换班人</th>
+                        <th>团队</th>
+                        <th>换班日期</th>
+                        <th>原班次</th>
+                        <th>交换人</th>
+                        <th>团队</th>
+                        <th>交换日期</th>
+                        <th>原班次</th>
+                        <th>备注</th>
+                        <th>操作人</th>
+                        <th>创建时间</th>
+                    </tr>
+                </thead>
+                <tbody id="swapTableBody"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 <!-- 新增/编辑弹窗 -->
 <div class="modal-overlay" id="recordModal">
     <div class="modal-dialog">
-        <div class="modal-title" id="modalTitle">新增调休记录</div>
+        <div class="modal-title" id="modalTitle">加班申请</div>
         <div class="modal-row">
             <label class="required">所属团队</label>
             <select id="modalTeam">
@@ -364,6 +425,21 @@
             <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
                 <label class="required">加班结束时间</label>
                 <input type="time" id="modalEndTime">
+            </div>
+        </div>
+        <div class="modal-row">
+            <label>扣除餐休</label>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="modalDeductionToggle">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span id="deductionLabel" style="font-size:0.92rem;color:#94a3b8;">关闭</span>
+                <span id="deductionInputGroup" style="display:none;align-items:center;gap:8px;">
+                    <span style="font-size:0.92rem;color:#475569;">扣除时长</span>
+                    <input type="number" id="modalDeduction" step="0.1" min="0.1" max="8.0" placeholder="0.0" style="width:80px;">
+                    <span style="font-size:0.92rem;color:#475569;">小时</span>
+                </span>
             </div>
         </div>
         <div class="modal-row">
@@ -397,6 +473,50 @@
     </div>
 </div>
 
+<!-- 换班/换休申请弹窗 -->
+<div class="modal-overlay" id="swapModal">
+    <div class="modal-dialog" style="width: 680px;">
+        <div class="modal-title" id="swapModalTitle">换班申请</div>
+        <table class="swap-table">
+            <thead>
+                <tr>
+                    <th style="width:80px;">类型</th>
+                    <th style="width:130px;">姓名</th>
+                    <th style="width:160px;">日期</th>
+                    <th>当日班次</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="font-weight:600;" id="swapLabelA">换班人</td>
+                    <td><select id="swapPersonA"></select></td>
+                    <td><input type="date" id="swapDateA"></td>
+                    <td class="shift-info" id="swapShiftA">-</td>
+                </tr>
+                <tr>
+                    <td style="font-weight:600;" id="swapLabelB">交换人</td>
+                    <td><select id="swapPersonB"></select></td>
+                    <td><input type="date" id="swapDateB"></td>
+                    <td class="shift-info" id="swapShiftB">-</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="modal-row">
+            <label class="required">备注 <span style="font-weight:400;color:#94a3b8;">（必填，最多200字）</span></label>
+            <textarea id="swapRemark" placeholder="请输入换班原因" maxlength="200"></textarea>
+            <div class="char-count"><span id="swapRemarkCount">0</span>/200</div>
+        </div>
+        <div class="modal-row">
+            <label class="required">操作人 <span style="font-weight:400;color:#94a3b8;">（主管）</span></label>
+            <div class="submitter-options" id="swapOperatorOptions"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn" id="swapCancelBtn">取消</button>
+            <button class="btn btn-primary" id="swapSubmitBtn">提交换班</button>
+        </div>
+    </div>
+</div>
+
 <div id="toastMsg" class="toast-msg" style="display: none;"></div>
 
 <script>
@@ -425,6 +545,7 @@
     }
 
     let records = [];
+    let swapRecords = [];
     let employees = [];
     let filterTeam = '';
     let filterMonth = '';
@@ -457,12 +578,33 @@
         });
     }
 
+    function getFilteredSwapRecords() {
+        return swapRecords.filter(r => {
+            const matchTeam = !filterTeam || r.team_a === filterTeam || r.team_b === filterTeam;
+            const matchMonth = !filterMonth || r.date_a.startsWith(filterMonth) || r.date_b.startsWith(filterMonth);
+            const matchEmployee = filterEmployees.length === 0 || filterEmployees.includes(r.person_a) || filterEmployees.includes(r.person_b);
+            return matchTeam && matchMonth && matchEmployee;
+        });
+    }
+
     async function loadRecords() {
         const params = new URLSearchParams();
         if (filterTeam) params.set('team', filterTeam);
         if (filterMonth) params.set('month', filterMonth);
         const qs = params.toString();
         records = await apiGet('/leave-records' + (qs ? '?' + qs : ''));
+    }
+
+    async function loadSwapRecords() {
+        try {
+            const params = new URLSearchParams();
+            if (filterTeam) params.set('team', filterTeam);
+            if (filterMonth) params.set('month', filterMonth);
+            const qs = params.toString();
+            swapRecords = await apiGet('/swap-records' + (qs ? '?' + qs : ''));
+        } catch (e) {
+            swapRecords = [];
+        }
     }
 
     async function loadEmployees() {
@@ -492,9 +634,9 @@
             <tr>
                 <td style="font-weight:500; color:#6366f1;">${r.id}</td>
                 <td><span class="team-badge">${r.team}</span></td>
-                <td>${r.leave_date}</td>
                 <td>${r.dongfu_id || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td style="font-weight:600;">${r.employee_name}</td>
+                <td>${r.leave_date}</td>
                 <td>${r.start_time}</td>
                 <td>${r.end_time}</td>
                 <td style="font-weight:600;">${r.hours.toFixed(1)}</td>
@@ -516,9 +658,44 @@
         });
     }
 
+    function renderSwapTable() {
+        const filtered = getFilteredSwapRecords();
+        const tbody = document.getElementById("swapTableBody");
+        document.getElementById("swapTableInfo").textContent = `共 ${filtered.length} 条换班记录`;
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="13">暂无换班/换休记录</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(r => {
+            const typeBadge = r.swap_type === 'shift_swap'
+                ? '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#fef3c7;color:#d97706;">换班</span>'
+                : '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#eef2ff;color:#4f46e5;">换休</span>';
+            return `
+                <tr>
+                    <td style="font-weight:500; color:#6366f1;">${r.id}</td>
+                    <td>${typeBadge}</td>
+                    <td style="font-weight:600;">${r.person_a}</td>
+                    <td><span class="team-badge">${r.team_a || '-'}</span></td>
+                    <td>${r.date_a}</td>
+                    <td>${r.shift_a || '-'}</td>
+                    <td style="font-weight:600;">${r.person_b}</td>
+                    <td><span class="team-badge">${r.team_b || '-'}</span></td>
+                    <td>${r.date_b}</td>
+                    <td>${r.shift_b || '-'}</td>
+                    <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${(r.remark || '').replace(/"/g, '&quot;')}">${r.remark || '-'}</td>
+                    <td>${r.operator || '-'}</td>
+                    <td style="font-size:0.85rem; color:#64748b;">${r.created_at || '-'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
     function refreshAll() {
         renderTeamFilter();
         renderTable();
+        renderSwapTable();
     }
 
     // ========== 弹窗逻辑 ==========
@@ -572,7 +749,7 @@
 
     function openAddModal() {
         editingRecordId = null;
-        document.getElementById("modalTitle").textContent = "新增调休记录";
+        document.getElementById("modalTitle").textContent = "加班申请";
         renderTeamSelect("modalTeam", "");
         document.getElementById("modalLeaveDate").value = new Date().toISOString().slice(0, 10);
         document.getElementById("modalEmployee").innerHTML = '<option value="">请先选择团队</option>';
@@ -580,6 +757,10 @@
         document.getElementById("modalEndTime").value = "";
         document.getElementById("modalRemark").value = "";
         document.getElementById("remarkCount").textContent = "0";
+        document.getElementById("modalDeductionToggle").checked = false;
+        document.getElementById("modalDeduction").value = "";
+        document.getElementById("deductionLabel").textContent = "关闭";
+        document.getElementById("deductionInputGroup").style.display = "none";
         renderSubmitterOptions("");
         document.getElementById("recordModal").classList.add("active");
     }
@@ -588,7 +769,7 @@
         const record = records.find(r => r.id === recordId);
         if (!record) return;
         editingRecordId = recordId;
-        document.getElementById("modalTitle").textContent = "编辑调休记录";
+        document.getElementById("modalTitle").textContent = "编辑加班申请";
         renderTeamSelect("modalTeam", record.team);
         document.getElementById("modalLeaveDate").value = record.leave_date;
         renderEmployeeSelect(record.team);
@@ -597,6 +778,18 @@
         document.getElementById("modalEndTime").value = record.end_time;
         document.getElementById("modalRemark").value = record.remark || "";
         document.getElementById("remarkCount").textContent = (record.remark || "").length;
+        const deduction = record.deduction || 0;
+        if (deduction > 0) {
+            document.getElementById("modalDeductionToggle").checked = true;
+            document.getElementById("modalDeduction").value = deduction;
+            document.getElementById("deductionLabel").textContent = "开启";
+            document.getElementById("deductionInputGroup").style.display = "flex";
+        } else {
+            document.getElementById("modalDeductionToggle").checked = false;
+            document.getElementById("modalDeduction").value = "";
+            document.getElementById("deductionLabel").textContent = "关闭";
+            document.getElementById("deductionInputGroup").style.display = "none";
+        }
         renderSubmitterOptions(record.submitter);
         document.getElementById("recordModal").classList.add("active");
     }
@@ -622,7 +815,18 @@
         if (!submitter) { showToast("请选择提交人"); return; }
         if (remark.length > 200) { showToast("备注不能超过200字符"); return; }
 
-        const data = { team, leaveDate, employeeName, startTime, endTime, remark, submitter };
+        const deductionToggle = document.getElementById("modalDeductionToggle").checked;
+        let deduction = 0;
+        if (deductionToggle) {
+            const val = parseFloat(document.getElementById("modalDeduction").value);
+            if (isNaN(val) || val < 0.1 || val > 8.0) {
+                showToast("扣除时长需在0.1~8.0小时之间");
+                return;
+            }
+            deduction = val;
+        }
+
+        const data = { team, leaveDate, employeeName, startTime, endTime, remark, submitter, deduction };
 
         try {
             if (editingRecordId) {
@@ -792,6 +996,131 @@
 
     function getEmployeeNames() { return employees.map(e => e.name); }
 
+    // ========== 换班/换休申请 ==========
+    let swapMode = 'shift';
+
+    async function lookupShift(employee, date) {
+        if (!employee || !date) return null;
+        try {
+            return await apiGet(`/schedule/lookup?employee=${encodeURIComponent(employee)}&date=${date}`);
+        } catch {
+            return null;
+        }
+    }
+
+    function renderSwapPersonSelects() {
+        const allActive = employees.filter(e => e.status === 'active');
+        const selA = document.getElementById('swapPersonA');
+        const selB = document.getElementById('swapPersonB');
+        const prevA = selA.value;
+        const prevB = selB.value;
+        selA.innerHTML = '<option value="">请选择</option>' +
+            allActive.map(e => `<option value="${e.name}" ${e.name===prevA?'selected':''}>${e.name}</option>`).join('');
+        selB.innerHTML = '<option value="">请选择</option>' +
+            allActive.map(e => `<option value="${e.name}" ${e.name===prevB?'selected':''}>${e.name}</option>`).join('');
+    }
+
+    async function refreshSwapShift(side) {
+        const person = document.getElementById('swapPerson' + side).value;
+        const date = document.getElementById('swapDate' + side).value;
+        const cell = document.getElementById('swapShift' + side);
+        if (!person || !date) {
+            cell.innerHTML = '<span style="color:#94a3b8;">-</span>';
+            return;
+        }
+        cell.innerHTML = '<span style="color:#94a3b8;">查询中...</span>';
+        const result = await lookupShift(person, date);
+        if (result && result.shift_name) {
+            cell.innerHTML = `<span style="font-weight:600; color:#3730a3;">${result.shift_name}</span>
+                <br><span style="font-size:0.85rem; color:#64748b;">${result.start_time} - ${result.end_time}</span>`;
+        } else {
+            cell.innerHTML = '<span style="color:#ef4444;">未排班</span>';
+        }
+    }
+
+    function renderSwapOperatorOptions(selectedOperator) {
+        const container = document.getElementById('swapOperatorOptions');
+        const supervisors = getSupervisors();
+        if (supervisors.length === 0) {
+            container.innerHTML = '<span style="color:#94a3b8; font-size:0.92rem;">暂无可选主管</span>';
+            return;
+        }
+        container.innerHTML = supervisors.map(s => {
+            const cls = (s.name === selectedOperator) ? 'submitter-opt selected' : 'submitter-opt';
+            return `<span class="${cls}" data-name="${s.name}">${s.name}</span>`;
+        }).join('');
+        container.querySelectorAll('.submitter-opt').forEach(opt => {
+            opt.addEventListener('click', () => {
+                container.querySelectorAll('.submitter-opt').forEach(o => o.classList.remove('selected'));
+                opt.classList.add('selected');
+            });
+        });
+    }
+
+    function getSelectedSwapOperator() {
+        const selected = document.querySelector('#swapOperatorOptions .submitter-opt.selected');
+        return selected ? selected.getAttribute('data-name') : '';
+    }
+
+    function openSwapModal(mode) {
+        swapMode = mode;
+        document.getElementById('swapModalTitle').textContent = mode === 'shift' ? '换班申请' : '换休申请';
+        document.getElementById('swapLabelA').textContent = mode === 'shift' ? '换班人' : '换休人';
+        document.getElementById('swapLabelB').textContent = '交换人';
+        document.getElementById('swapSubmitBtn').textContent = mode === 'shift' ? '提交换班' : '提交换休';
+        document.getElementById('swapPersonA').value = '';
+        document.getElementById('swapPersonB').value = '';
+        document.getElementById('swapDateA').value = '';
+        document.getElementById('swapDateB').value = '';
+        document.getElementById('swapShiftA').innerHTML = '<span style="color:#94a3b8;">-</span>';
+        document.getElementById('swapShiftB').innerHTML = '<span style="color:#94a3b8;">-</span>';
+        document.getElementById('swapRemark').value = '';
+        document.getElementById('swapRemarkCount').textContent = '0';
+        renderSwapPersonSelects();
+        renderSwapOperatorOptions('');
+        document.getElementById('swapModal').classList.add('active');
+    }
+
+    function closeSwapModal() {
+        document.getElementById('swapModal').classList.remove('active');
+    }
+
+    async function submitSwap() {
+        const personA = document.getElementById('swapPersonA').value;
+        const dateA = document.getElementById('swapDateA').value;
+        const personB = document.getElementById('swapPersonB').value;
+        const dateB = document.getElementById('swapDateB').value;
+        const remark = document.getElementById('swapRemark').value.trim();
+        const operator = getSelectedSwapOperator();
+
+        if (!personA) { showToast('请选择' + (swapMode === 'shift' ? '换班人' : '换休人')); return; }
+        if (!dateA) { showToast('请选择' + (swapMode === 'shift' ? '换班日期' : '换休日期')); return; }
+        if (!personB) { showToast('请选择交换人'); return; }
+        if (!dateB) { showToast('请选择交换日期'); return; }
+        if (!remark) { showToast('请填写备注'); return; }
+        if (remark.length > 200) { showToast('备注不能超过200字符'); return; }
+        if (!operator) { showToast('请选择操作人'); return; }
+
+        const shiftAText = document.getElementById('swapShiftA').textContent.trim();
+        const shiftBText = document.getElementById('swapShiftB').textContent.trim();
+        if (shiftAText === '未排班' || shiftAText === '-' || shiftAText === '查询中...') { showToast('请确认' + (swapMode === 'shift' ? '换班人' : '换休人') + '当日有有效班次'); return; }
+        if (shiftBText === '未排班' || shiftBText === '-' || shiftBText === '查询中...') { showToast('请确认交换人当日有有效班次'); return; }
+
+        try {
+            await apiPost('/swap-records', {
+                swapType: swapMode === 'shift' ? 'shift_swap' : 'rest_swap',
+                personA, dateA, personB, dateB, remark, operator
+            });
+            closeSwapModal();
+            await loadRecords();
+            await loadSwapRecords();
+            refreshAll();
+            showToast(swapMode === 'shift' ? '换班成功' : '换休成功');
+        } catch (e) {
+            showToast(e.message);
+        }
+    }
+
     // ========== 初始化 ==========
     async function init() {
         filterMonth = getMonthStr(monthDisplay);
@@ -805,7 +1134,7 @@
         }
 
         try {
-            await Promise.all([loadEmployees(), loadRecords()]);
+            await Promise.all([loadEmployees(), loadRecords(), loadSwapRecords()]);
         } catch (e) {
             showToast("数据加载失败: " + e.message);
         }
@@ -823,6 +1152,8 @@
         refreshAll();
 
         document.getElementById("addRecordBtn").addEventListener("click", openAddModal);
+        document.getElementById("swapShiftBtn").addEventListener("click", () => openSwapModal('shift'));
+        document.getElementById("swapRestBtn").addEventListener("click", () => openSwapModal('rest'));
 
         document.getElementById("exportBtn").addEventListener("click", () => {
             const params = new URLSearchParams();
@@ -842,6 +1173,7 @@
             updateMonthLabel();
             document.getElementById("filterEmployeeTrigger").innerHTML = '<span class="ms-placeholder">全部员工</span>';
             await loadRecords();
+            await loadSwapRecords();
             refreshAll();
             showToast("筛选条件已重置");
         });
@@ -850,7 +1182,9 @@
             filterTeam = document.getElementById("filterTeam").value;
             filterMonth = getMonthStr(monthDisplay);
             await loadRecords();
+            await loadSwapRecords();
             renderTable();
+            renderSwapTable();
             showToast("筛选完成");
         });
 
@@ -877,6 +1211,26 @@
             if (e.target === document.getElementById("deleteModal")) closeDeleteModal();
         });
 
+        // 换班/换休弹窗事件
+        document.getElementById("swapCancelBtn").addEventListener("click", closeSwapModal);
+        document.getElementById("swapSubmitBtn").addEventListener("click", submitSwap);
+        document.getElementById("swapModal").addEventListener("click", (e) => {
+            if (e.target === document.getElementById("swapModal")) closeSwapModal();
+        });
+        document.getElementById("swapPersonA").addEventListener("change", () => {
+            renderSwapPersonSelects();
+            refreshSwapShift('A');
+        });
+        document.getElementById("swapPersonB").addEventListener("change", () => {
+            renderSwapPersonSelects();
+            refreshSwapShift('B');
+        });
+        document.getElementById("swapDateA").addEventListener("change", () => refreshSwapShift('A'));
+        document.getElementById("swapDateB").addEventListener("change", () => refreshSwapShift('B'));
+        document.getElementById("swapRemark").addEventListener("input", function() {
+            document.getElementById("swapRemarkCount").textContent = this.value.length;
+        });
+
         // 团队变更时更新员工下拉
         document.getElementById("modalTeam").addEventListener("change", function() {
             renderEmployeeSelect(this.value);
@@ -886,6 +1240,20 @@
         // 备注字数统计
         document.getElementById("modalRemark").addEventListener("input", function() {
             document.getElementById("remarkCount").textContent = this.value.length;
+        });
+
+        // 扣除餐休开关
+        document.getElementById("modalDeductionToggle").addEventListener("change", function() {
+            const label = document.getElementById("deductionLabel");
+            const group = document.getElementById("deductionInputGroup");
+            if (this.checked) {
+                label.textContent = "开启";
+                group.style.display = "flex";
+            } else {
+                label.textContent = "关闭";
+                group.style.display = "none";
+                document.getElementById("modalDeduction").value = "";
+            }
         });
 
         // 侧栏导航

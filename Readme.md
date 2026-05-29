@@ -45,7 +45,7 @@ python app.py
 ├── 排班表.html             # 排班表（日/周/月视图、导入导出、加班标记）
 ├── 原始排班.html           # 原始排班表（独立管理、同步到排班表）
 ├── 工作安排.html           # 工作安排（每日工作类型分配、用餐安排）
-├── 加班管理.html           # 加班管理（调休记录 CRUD、筛选导出）
+├── 加班换班.html           # 加班换班（加班记录、换班/换休申请与记录）
 ├── 员工管理.html           # 员工管理（CRUD + Excel 批量导入）
 ├── 班次设置.html           # 班次设置（CRUD）
 ├── 通知设置.html           # 通知设置（钉钉机器人 + 定时任务）
@@ -118,7 +118,7 @@ python app.py
 | dinner_slot | TEXT | 晚餐时段（可空） |
 | UNIQUE(date, employee_name) | | 每人每天只能有一条安排 |
 
-### leave_records（调休记录表）
+### leave_records（加班记录表）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -129,11 +129,30 @@ python app.py
 | employee_name | TEXT | 员工姓名 |
 | start_time | TEXT | 加班开始时间 HH:MM |
 | end_time | TEXT | 加班结束时间 HH:MM |
-| hours | REAL | 加班时长（自动计算，支持跨天） |
+| hours | REAL | 加班时长（自动计算，支持跨天、扣除餐休） |
 | remark | TEXT | 备注（最多200字） |
 | submitter | TEXT | 提交人（从主管中选择） |
+| deduction | REAL | 扣除餐休时长（0表示未扣除） |
 | created_at | TEXT | 创建时间 |
 | updated_at | TEXT | 最后修改时间 |
+
+### swap_records（换班/换休记录表）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增 |
+| swap_type | TEXT | shift_swap=换班 / rest_swap=换休 |
+| person_a | TEXT | 换班人（或被换班人） |
+| team_a | TEXT | 换班人所属团队 |
+| date_a | TEXT | 换班日期 YYYY-MM-DD |
+| shift_a | TEXT | 换班人原班次 |
+| person_b | TEXT | 交换人（或被交换人） |
+| team_b | TEXT | 交换人所属团队 |
+| date_b | TEXT | 交换日期 YYYY-MM-DD |
+| shift_b | TEXT | 交换人原班次 |
+| remark | TEXT | 备注（必填） |
+| operator | TEXT | 操作人（主管） |
+| created_at | TEXT | 创建时间 |
 
 ---
 
@@ -190,15 +209,22 @@ POST   /api/assignments                  批量保存 {date, assignments: [{empl
 
 工作类型：热线、在线、工单、反向工单、自主售后、售后单、紧急、本地生活、卡密查询
 
-### 加班管理
+### 加班换班
 
 ```
-GET    /api/leave-records?team=&month=   列表（支持团队、月份筛选）
-POST   /api/leave-records                新增记录（自动计算时长、查询东福工号）
-PUT    /api/leave-records/<id>           编辑记录
-DELETE /api/leave-records/<id>           删除记录
+GET    /api/leave-records?team=&month=   加班列表（支持团队、月份筛选）
+POST   /api/leave-records                新增加班记录（自动计算时长、支持扣除餐休）
+PUT    /api/leave-records/<id>           编辑加班记录
+DELETE /api/leave-records/<id>           删除加班记录
 GET    /api/leave-records/export?team=&month=&employees=  Excel 导出
+GET    /api/schedule/lookup?employee=&date=  查询某员工某日排班
+GET    /api/swap-records?team=&month=    换班记录列表（受页面筛选器控制）
+POST   /api/swap-records                 提交换班/换休（互换班次，换休自动创建加班记录）
 ```
+
+**加班时长计算**：结束时间 - 开始时间 - 扣除餐休时长（若开启）
+
+**换班逻辑**：交换两个日期上两人的排班班次。换休时额外自动为休息变上班的员工创建加班记录，工时取所换班次的 `work_hours`。
 
 导出时开始/结束时间自动拼接加班日期（如 `2026-05-29 09:00`），跨天场景结束时间自动加一天。
 
@@ -238,7 +264,7 @@ DELETE /api/notify/task/<id>             删除定时任务
 | 来源 | 目标 | 方式 |
 |------|------|------|
 | 总览页月历 | 排班表 | `排班表.html?date=2026-05-15&view=day` |
-| 排班表加班标记 | 加班管理 | `加班管理.html?employee=张三`（自动筛选该员工） |
+| 排班表加班标记 | 加班换班 | `加班换班.html?employee=张三`（自动筛选该员工） |
 
 ---
 
@@ -320,4 +346,5 @@ CMD ["python", "app.py"]
 - 无登录鉴权，内网部署建议搭配 nginx basic auth 或 VPN
 - 班次颜色：A班(蓝)、B班(青)、C班(紫)、D班(靛)、E班(黄)、T班/F班(自定义)、休息/放休(灰)、请假(橙)
 - 团队颜色：在线组(绿)、热线组(蓝)、售后组(橙)、综合组(紫)、VIP组(粉)、质检组(黄)、支持组(青)
-- 加班标记：排班表中红色「加班」标签，hover 显示时长和时间段，点击跳转加班管理并自动筛选该员工
+- 换班/换休标记：排班表中橙色「换班」或蓝紫色「换休」标签，hover 显示交换信息
+- 加班标记：排班表中红色「加班」标签，hover 显示时长和时间段，点击跳转加班换班并自动筛选该员工
