@@ -63,8 +63,68 @@
             padding: 8px 12px; border-radius: 10px; border: 1px solid #cbd5e1;
             font-size: 0.92rem; background: white;
         }
+
+        /* 多选下拉 */
+        .multi-select { position: relative; user-select: none; }
+        .multi-select-trigger {
+            display: block;
+            height: 34px; padding: 0 10px; border: 1px solid #cbd5e1;
+            border-radius: 10px; background: white; cursor: pointer; font-size: 0.92rem;
+            transition: border-color 0.15s;
+            overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+            line-height: 32px;
+        }
+        .multi-select-trigger:hover { border-color: #94a3b8; }
+        .multi-select.open .multi-select-trigger { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.12); }
+        .ms-placeholder { color: #94a3b8; font-size: 0.92rem; }
+        .ms-dropdown {
+            display: none; position: fixed; z-index: 999;
+            background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-height: 280px;
+            overflow: hidden;
+        }
+        .multi-select.open .ms-dropdown { display: block; }
+        .ms-search { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 6px; align-items: center; }
+        .ms-search input {
+            flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px;
+            font-size: 0.92rem; outline: none;
+        }
+        .ms-search input:focus { border-color: #6366f1; }
+        .ms-select-all {
+            font-size: 0.85rem; color: #6366f1; cursor: pointer; white-space: nowrap;
+            padding: 5px 10px; border-radius: 6px; font-weight: 600;
+            border: 1px solid #c7d2fe; background: #eef2ff;
+        }
+        .ms-select-all:hover { background: #e0e7ff; }
+        .ms-options { max-height: 180px; overflow-y: auto; padding: 4px 0; }
+        .ms-option {
+            display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+            font-size: 0.92rem; cursor: pointer; transition: background 0.1s;
+        }
+        .ms-option:hover { background: #f8fafc; }
+        .ms-option input[type="checkbox"] { accent-color: #6366f1; }
+        .ms-actions {
+            display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid #e2e8f0;
+            justify-content: flex-end;
+        }
         .filter-buttons { display: flex; gap: 10px; align-items: flex-end; margin-left: auto; }
         .filter-buttons .btn { min-width: 100px; justify-content: center; }
+
+        /* 状态Tab切换 */
+        .status-tabs {
+            display: flex; gap: 0; border-radius: 10px; overflow: hidden;
+            border: 1px solid #cbd5e1; width: fit-content;
+        }
+        .status-tab {
+            padding: 8px 18px; font-size: 0.92rem; cursor: pointer;
+            background: white; color: #64748b; border: none; outline: none;
+            transition: all 0.15s; font-weight: 500;
+        }
+        .status-tab + .status-tab { border-left: 1px solid #cbd5e1; }
+        .status-tab.active {
+            background: #2c3e66; color: white; font-weight: 600;
+        }
+        .status-tab:hover:not(.active) { background: #f1f5f9; }
 
         /* 操作栏 */
         .action-bar {
@@ -215,6 +275,33 @@
                 <select id="filterTeam">
                     <option value="">全部团队</option>
                 </select>
+            </div>
+            <div class="filter-field">
+                <label>员工岗位</label>
+                <div class="multi-select" id="filterPosition">
+                    <div class="multi-select-trigger" id="filterPositionTrigger">
+                        <span class="ms-placeholder">全部岗位</span>
+                    </div>
+                    <div class="ms-dropdown">
+                        <div class="ms-search">
+                            <input type="text" placeholder="搜索..." id="filterPositionSearch">
+                            <span class="ms-select-all" id="filterPositionAll">全选</span>
+                        </div>
+                        <div class="ms-options" id="filterPositionOptions"></div>
+                        <div class="ms-actions">
+                            <button class="btn btn-sm" id="filterPositionClear">清除</button>
+                            <button class="btn btn-sm btn-primary" id="filterPositionOk">确定</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-field" style="width:auto;">
+                <label>员工状态</label>
+                <div class="status-tabs" id="filterStatusTabs">
+                    <button class="status-tab active" data-value="">全部</button>
+                    <button class="status-tab" data-value="active">有效</button>
+                    <button class="status-tab" data-value="inactive">无效</button>
+                </div>
             </div>
             <div class="filter-buttons">
                 <button class="btn" id="resetFilterBtn">重置选项</button>
@@ -373,12 +460,16 @@
     let employees = [];
     let filterName = '';
     let filterTeam = '';
+    let filterStatus = '';
+    let filterPositions = [];
 
     function getFilteredEmployees() {
         return employees.filter(e => {
             const matchName = !filterName || e.name.toLowerCase().includes(filterName.toLowerCase());
             const matchTeam = !filterTeam || e.team === filterTeam;
-            return matchName && matchTeam;
+            const matchStatus = !filterStatus || e.status === filterStatus;
+            const matchPosition = filterPositions.length === 0 || filterPositions.includes(e.position);
+            return matchName && matchTeam && matchStatus && matchPosition;
         });
     }
 
@@ -571,18 +662,159 @@
         }
     }
 
+    // ========== 多选下拉组件 ==========
+    let msPagePosition;
+
+    function initMultiSelect(config) {
+        const { containerId, triggerId, searchId, selectAllId, optionsId, clearId, okId, getOptions, getSelected, setSelected, placeholder } = config;
+        const container = document.getElementById(containerId);
+        const trigger = document.getElementById(triggerId);
+        const searchInput = document.getElementById(searchId);
+        const selectAllBtn = document.getElementById(selectAllId);
+        const optionsContainer = document.getElementById(optionsId);
+
+        function renderTrigger() {
+            const sel = getSelected();
+            const allOpts = getOptions();
+            if (sel.length === 0) {
+                trigger.innerHTML = `<span class="ms-placeholder">${placeholder || '请选择'}</span>`;
+            } else if (sel.length === allOpts.length && allOpts.length > 0) {
+                trigger.innerHTML = `<span class="ms-placeholder" style="color:#3730a3;font-weight:500;">全部 (${allOpts.length})</span>`;
+            } else {
+                trigger.textContent = sel.join('、');
+                trigger.title = sel.join('、');
+            }
+        }
+
+        function renderDropdown() {
+            const sel = getSelected();
+            const q = searchInput.value.toLowerCase();
+            const allOpts = getOptions();
+            const opts = allOpts.filter(o => o.toLowerCase().includes(q));
+            if (sel.length === allOpts.length && allOpts.length > 0) {
+                selectAllBtn.textContent = '取消全选';
+            } else {
+                selectAllBtn.textContent = '全选';
+            }
+            optionsContainer.innerHTML = opts.map(o => {
+                const checked = sel.includes(o) ? 'checked' : '';
+                return `<label class="ms-option"><input type="checkbox" value="${o}" ${checked}> ${o}</label>`;
+            }).join('');
+            if (opts.length === 0) {
+                optionsContainer.innerHTML = `<div style="padding:16px;text-align:center;color:#94a3b8;">无匹配选项</div>`;
+            }
+            optionsContainer.querySelectorAll('input').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    if (cb.checked) setSelected([...getSelected(), cb.value]);
+                    else setSelected(getSelected().filter(v => v !== cb.value));
+                    renderTrigger();
+                    if (config.onChange) config.onChange();
+                });
+            });
+        }
+
+        const dropdown = container.querySelector('.ms-dropdown');
+
+        function positionDropdown() {
+            const rect = trigger.getBoundingClientRect();
+            const dropdownH = dropdown.scrollHeight || 280;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const spaceAbove = rect.top;
+            if (spaceBelow < dropdownH && spaceAbove > spaceBelow) {
+                dropdown.style.top = Math.max(0, rect.top - Math.min(dropdownH, 280) - 4) + 'px';
+            } else {
+                dropdown.style.top = Math.min(rect.bottom + 4, window.innerHeight - Math.min(dropdownH, 280)) + 'px';
+            }
+            dropdown.style.left = Math.min(rect.left, window.innerWidth - 260) + 'px';
+            dropdown.style.width = Math.max(rect.width, 200) + 'px';
+        }
+
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = container.classList.contains('open');
+            document.querySelectorAll('.multi-select.open').forEach(ms => ms.classList.remove('open'));
+            if (!isOpen) {
+                container.classList.add('open');
+                searchInput.value = '';
+                renderDropdown();
+                positionDropdown();
+                setTimeout(() => searchInput.focus(), 50);
+            }
+        });
+
+        searchInput.addEventListener('input', renderDropdown);
+        searchInput.addEventListener('click', e => e.stopPropagation());
+
+        selectAllBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const allOpts = getOptions();
+            if (getSelected().length === allOpts.length && allOpts.length > 0) {
+                setSelected([]);
+            } else {
+                setSelected([...allOpts]);
+            }
+            renderTrigger();
+            renderDropdown();
+            if (config.onChange) config.onChange();
+        });
+
+        document.getElementById(clearId).addEventListener('click', () => {
+            setSelected([]);
+            renderTrigger();
+            renderDropdown();
+            if (config.onChange) config.onChange();
+        });
+
+        document.getElementById(okId).addEventListener('click', () => {
+            container.classList.remove('open');
+        });
+
+        document.addEventListener('click', () => {
+            container.classList.remove('open');
+        });
+
+        renderTrigger();
+        return { renderTrigger, renderDropdown };
+    }
+
     // ========== 初始化 ==========
     async function init() {
         await loadEmployees();
         refreshAll();
+
+        // 岗位多选下拉
+        msPagePosition = initMultiSelect({
+            containerId: 'filterPosition', triggerId: 'filterPositionTrigger',
+            searchId: 'filterPositionSearch', selectAllId: 'filterPositionAll',
+            optionsId: 'filterPositionOptions', clearId: 'filterPositionClear',
+            okId: 'filterPositionOk', placeholder: '全部岗位',
+            getOptions: () => positionOptions,
+            getSelected: () => filterPositions,
+            setSelected: (v) => { filterPositions = v; }
+        });
+
+        // 状态Tab切换（单选）
+        document.querySelectorAll("#filterStatusTabs .status-tab").forEach(tab => {
+            tab.addEventListener("click", function() {
+                document.querySelectorAll("#filterStatusTabs .status-tab").forEach(t => t.classList.remove("active"));
+                this.classList.add("active");
+                filterStatus = this.getAttribute("data-value");
+            });
+        });
 
         document.getElementById("addEmployeeBtn").addEventListener("click", openAddModal);
 
         document.getElementById("resetFilterBtn").addEventListener("click", () => {
             filterName = '';
             filterTeam = '';
+            filterStatus = '';
+            filterPositions = [];
             document.getElementById("filterName").value = '';
             document.getElementById("filterTeam").value = '';
+            document.querySelectorAll("#filterStatusTabs .status-tab").forEach(tab => {
+                tab.classList.toggle("active", tab.getAttribute("data-value") === "");
+            });
+            msPagePosition.renderTrigger();
             refreshAll();
             showToast("筛选条件已重置");
         });

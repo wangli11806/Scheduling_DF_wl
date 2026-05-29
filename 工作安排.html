@@ -208,9 +208,6 @@
 <div class="main-area">
     <div class="header-bar">
         <h1>工作安排</h1>
-        <div class="header-right">
-            <button class="btn btn-primary" id="saveBtn">保存</button>
-        </div>
     </div>
     <div class="content-body">
         <div class="top-bar">
@@ -234,6 +231,25 @@
                         <div class="ms-actions">
                             <button class="btn btn-sm" id="filterShiftClear">清除</button>
                             <button class="btn btn-sm btn-primary" id="filterShiftOk">确定</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-field">
+                <label>团队筛选</label>
+                <div class="multi-select" id="filterTeam">
+                    <div class="multi-select-trigger" id="filterTeamTrigger">
+                        <span class="ms-placeholder">全部团队</span>
+                    </div>
+                    <div class="ms-dropdown">
+                        <div class="ms-search">
+                            <input type="text" placeholder="搜索..." id="filterTeamSearch">
+                            <span class="ms-select-all" id="filterTeamAll">全选</span>
+                        </div>
+                        <div class="ms-options" id="filterTeamOptions"></div>
+                        <div class="ms-actions">
+                            <button class="btn btn-sm" id="filterTeamClear">清除</button>
+                            <button class="btn btn-sm btn-primary" id="filterTeamOk">确定</button>
                         </div>
                     </div>
                 </div>
@@ -272,6 +288,8 @@ let scheduleMap = new Map();
 let assignmentMap = {};  // employee_name → {work_types:[], lunch_slot, dinner_slot}
 let shiftOptions = [];
 let filterSelectedShifts = [];
+const TEAM_OPTIONS = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
+let filterSelectedTeams = ["在线组","热线组","售后组"];
 
 async function apiGet(url) {
     const res = await fetch(API_BASE + url);
@@ -348,6 +366,11 @@ function renderTable() {
     // 按班次筛选
     if (filterSelectedShifts.length > 0 && filterSelectedShifts.length < shiftOptions.length) {
         working = working.filter(e => filterSelectedShifts.includes(getShift(dateStr, e.name)));
+    }
+
+    // 按团队筛选
+    if (filterSelectedTeams.length > 0 && filterSelectedTeams.length < TEAM_OPTIONS.length) {
+        working = working.filter(e => filterSelectedTeams.includes(e.team));
     }
 
     // 排序：团队 → 班次 → 姓名
@@ -452,6 +475,7 @@ function renderTable() {
                 cell.textContent = '';
             }
             updateSummaryRow();
+            saveData();
         });
     });
 
@@ -463,6 +487,7 @@ function renderTable() {
                 assignmentMap[empName] = { work_types: [], lunch_slot: '', dinner_slot: '' };
             }
             assignmentMap[empName].lunch_slot = sel.value;
+            saveData();
         });
     });
     document.querySelectorAll('.dinner-select').forEach(sel => {
@@ -472,6 +497,7 @@ function renderTable() {
                 assignmentMap[empName] = { work_types: [], lunch_slot: '', dinner_slot: '' };
             }
             assignmentMap[empName].dinner_slot = sel.value;
+            saveData();
         });
     });
 }
@@ -483,7 +509,10 @@ function updateSummaryRow() {
     const filtered = working.filter(e => {
         if (filterPos && e.position !== filterPos) return false;
         if (filterSelectedShifts.length > 0 && filterSelectedShifts.length < shiftOptions.length) {
-            return filterSelectedShifts.includes(getShift(dateStr, e.name));
+            if (!filterSelectedShifts.includes(getShift(dateStr, e.name))) return false;
+        }
+        if (filterSelectedTeams.length > 0 && filterSelectedTeams.length < TEAM_OPTIONS.length) {
+            if (!filterSelectedTeams.includes(e.team)) return false;
         }
         return true;
     });
@@ -530,8 +559,7 @@ async function saveData() {
         }
     });
     try {
-        const result = await apiPost('/assignments', { date: dateStr, assignments });
-        showToast(`已保存 ${result.updated} 条工作安排`);
+        await apiPost('/assignments', { date: dateStr, assignments });
     } catch(e) {
         showToast('保存失败: ' + e.message);
     }
@@ -541,8 +569,11 @@ async function changeDate(delta) {
     currentDate.setDate(currentDate.getDate() + delta);
     await loadData();
     filterSelectedShifts = [...shiftOptions];
+    filterSelectedTeams = ["在线组","热线组","售后组"];
     msShift.renderTrigger();
     msShift.renderDropdown();
+    msTeam.renderTrigger();
+    msTeam.renderDropdown();
     renderTable();
     updateDateLabel();
 }
@@ -553,7 +584,7 @@ function updateDateLabel() {
         `${formatDate(currentDate)} 星期${weekNames[currentDate.getDay()]}`;
 }
 
-let msShift;
+let msShift, msTeam;
 
 function initMultiSelect(config) {
     const { containerId, triggerId, searchId, selectAllId, optionsId, clearId, okId, getOptions, getSelected, setSelected, placeholder, onChange } = config;
@@ -664,13 +695,22 @@ async function init() {
         onChange: () => { renderTable(); }
     });
 
+    msTeam = initMultiSelect({
+        containerId: 'filterTeam', triggerId: 'filterTeamTrigger',
+        searchId: 'filterTeamSearch', selectAllId: 'filterTeamAll',
+        optionsId: 'filterTeamOptions', clearId: 'filterTeamClear',
+        okId: 'filterTeamOk', placeholder: '全部团队',
+        getOptions: () => TEAM_OPTIONS,
+        getSelected: () => filterSelectedTeams,
+        setSelected: (v) => { filterSelectedTeams = v; },
+        onChange: () => { renderTable(); }
+    });
+
     renderTable();
     updateDateLabel();
 
     document.getElementById("prevDateBtn").addEventListener("click", () => changeDate(-1));
     document.getElementById("nextDateBtn").addEventListener("click", () => changeDate(1));
-    document.getElementById("saveBtn").addEventListener("click", saveData);
-
     document.querySelectorAll('input[name="filterPos"]').forEach(radio => {
         radio.addEventListener('change', () => renderTable());
     });
