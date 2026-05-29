@@ -118,6 +118,17 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_schedules_date ON schedules(schedule_date);
         CREATE INDEX IF NOT EXISTS idx_schedules_emp  ON schedules(employee_name);
 
+        CREATE TABLE IF NOT EXISTS raw_schedules (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            schedule_date  TEXT NOT NULL,
+            employee_name  TEXT NOT NULL,
+            shift_name     TEXT NOT NULL,
+            created_at     TEXT DEFAULT (datetime('now','localtime')),
+            UNIQUE(schedule_date, employee_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_raw_schedules_date ON raw_schedules(schedule_date);
+        CREATE INDEX IF NOT EXISTS idx_raw_schedules_emp  ON raw_schedules(employee_name);
+
         CREATE TABLE IF NOT EXISTS daily_assignments (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             date           TEXT NOT NULL,
@@ -776,6 +787,277 @@ def api_schedules_export():
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+# ==================== 原始排班 API ====================
+
+def _sync_raw_to_schedule(db, date_str, emp_name, shift_name):
+    """单向同步：原始排班 → 排班表"""
+    db.execute(
+        "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name, created_at=datetime('now','localtime')",
+        (date_str, emp_name, shift_name)
+    )
+
+
+@app.route("/api/raw-schedules", methods=["GET"])
+def api_raw_schedules_list():
+    start = request.args.get("start", "")
+    end = request.args.get("end", "")
+    db = get_db()
+    if start and end:
+        rows = db.execute(
+            "SELECT schedule_date, employee_name, shift_name FROM raw_schedules WHERE schedule_date>=? AND schedule_date<=? ORDER BY schedule_date, employee_name",
+            (start, end)
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT schedule_date, employee_name, shift_name FROM raw_schedules ORDER BY schedule_date, employee_name"
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/raw-schedules/batch", methods=["POST"])
+def api_raw_schedules_batch():
+    """批量新增/更新原始排班: {entries: [{date, employee, shift}, ...]}，并单向同步到排班表"""
+    data = request.json
+    entries = data.get("entries") or []
+    if not entries:
+        return jsonify({"error": "无排班数据"}), 400
+
+    db = get_db()
+    count = 0
+    for e in entries:
+        d = (e.get("date") or "").strip()
+        emp = (e.get("employee") or "").strip()
+        shift = (e.get("shift") or "").strip()
+        if not d or not emp:
+            continue
+        if not shift:
+            shift = "休息"
+        db.execute(
+            "INSERT INTO raw_schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name, created_at=datetime('now','localtime')",
+            (d, emp, shift)
+        )
+        _sync_raw_to_schedule(db, d, emp, shift)
+        count += 1
+    db.commit()
+    return jsonify({"ok": True, "updated": count})
+
+
+@app.route("/api/raw-schedules/import", methods=["POST"])
+def api_raw_schedules_import():
+    """Excel 导入原始排班（列表格式），单向同步到排班表"""
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "请上传文件"}), 400
+
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(file)
+    except Exception as e:
+        return jsonify({"error": f"无法解析该文件：{e}"}), 400
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) < 2:
+        return jsonify({"error": "Excel至少包含两行数据"}), 400
+
+    header = [str(c or "").lower() for c in rows[0]]
+    date_idx = next((i for i, h in enumerate(header) if "日期" in h), -1)
+    emp_idx = next((i for i, h in enumerate(header) if "员工" in h or "姓名" in h), -1)
+    shift_idx = next((i for i, h in enumerate(header) if "班次" in h or "shift" in h), -1)
+
+    if date_idx < 0 or emp_idx < 0 or shift_idx < 0:
+        return jsonify({"error": "Excel需包含【日期,员工,班次】三列"}), 400
+
+    db = get_db()
+    count = 0
+    failures = []
+    for rn, row in enumerate(rows[1:], start=2):
+        if not row:
+            continue
+        try:
+            d = str(row[date_idx] or "").strip()
+            emp = str(row[emp_idx] or "").strip()
+            shift = str(row[shift_idx] or "").strip()
+        except IndexError:
+            continue
+        if not d or not emp:
+            if emp or d:
+                failures.append({"row": rn, "employee": emp or "(空)", "date": d or "(空)", "reason": "信息不完整"})
+            continue
+        if not shift:
+            shift = "休息"
+        date_str = _parse_date(d)
+        if not date_str:
+            failures.append({"row": rn, "employee": emp, "date": d, "reason": "日期格式无法识别"})
+            continue
+        db.execute(
+            "INSERT INTO raw_schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
+            (date_str, emp, shift)
+        )
+        _sync_raw_to_schedule(db, date_str, emp, shift)
+        count += 1
+    db.commit()
+    wb.close()
+    return jsonify({"ok": True, "updated": count, "failures": failures})
+
+
+@app.route("/api/raw-schedules/import-matrix", methods=["POST"])
+def api_raw_schedules_import_matrix():
+    """Excel 矩阵格式导入原始排班，单向同步到排班表"""
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "请上传文件"}), 400
+
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(file)
+    except Exception as e:
+        return jsonify({"error": f"无法解析该文件：{e}"}), 400
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if len(rows) < 2:
+        return jsonify({"error": "Excel至少包含表头和数据行"}), 400
+
+    raw_header = rows[0]
+    header = [str(c or "").strip() for c in raw_header]
+    dates = []
+    for i in range(1, len(raw_header)):
+        d = _parse_date(raw_header[i]) or _parse_date(header[i])
+        if d:
+            dates.append((i, d))
+
+    if not dates:
+        sample = "、".join(header[1:6])
+        return jsonify({"error": f"未识别到日期列，表头前几列为：{sample}。请使用日期格式（如2026-02-01、2/1、1日）"}), 400
+
+    db = get_db()
+    db_shifts = db.execute("SELECT name FROM shifts").fetchall()
+    db_shift_names = [s["name"] for s in db_shifts]
+
+    code_to_shift = {
+        "A": "A班", "a": "A班",
+        "B": "B班", "b": "B班",
+        "C": "C班", "c": "C班",
+        "T": "T班", "t": "T班",
+        "E": "E班", "e": "E班",
+        "F": "F班", "f": "F班",
+        "休": "休息", "休假": "休息", "休息": "休息", "调休": "放休", "放休": "放休",
+        "假": "请假", "请假": "请假",
+    }
+
+    def resolve_shift(raw_val):
+        val = raw_val.strip()
+        if not val:
+            return "休息", None
+        if val in code_to_shift:
+            target = code_to_shift[val]
+            if target in db_shift_names:
+                return target, None
+            else:
+                return None, f"映射目标班次\"{target}\"在班次表中不存在"
+        if val in db_shift_names:
+            return val, None
+        for sn in db_shift_names:
+            if val in sn or sn in val:
+                return sn, None
+        return None, f"班次\"{val}\"无法识别"
+
+    count = 0
+    failures = []
+    for rn, row in enumerate(rows[1:], start=2):
+        if not row:
+            continue
+        emp_name = str(row[0] or "").strip()
+        if not emp_name:
+            continue
+
+        emp = db.execute("SELECT name FROM employees WHERE name=?", (emp_name,)).fetchone()
+        if not emp:
+            failures.append({"row": rn, "employee": emp_name, "date": "", "reason": "员工不存在"})
+            continue
+
+        for col_idx, date_str in dates:
+            try:
+                raw = str(row[col_idx] or "")
+            except IndexError:
+                raw = ""
+            if not raw.strip():
+                raw = ""
+
+            shift, err = resolve_shift(raw)
+            if err:
+                failures.append({"row": rn, "employee": emp_name, "date": date_str, "reason": err})
+                continue
+
+            db.execute(
+                "INSERT INTO raw_schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
+                (date_str, emp_name, shift)
+            )
+            _sync_raw_to_schedule(db, date_str, emp_name, shift)
+            count += 1
+
+    db.commit()
+    wb.close()
+    return jsonify({"ok": True, "updated": count, "failures": failures})
+
+
+@app.route("/api/raw-schedules/export", methods=["GET"])
+def api_raw_schedules_export():
+    """Excel 导出原始排班"""
+    start = request.args.get("start", "")
+    end = request.args.get("end", "")
+    db = get_db()
+
+    employees = db.execute("SELECT name, team FROM employees ORDER BY id").fetchall()
+
+    if start and end:
+        rows = db.execute(
+            "SELECT schedule_date, employee_name, shift_name FROM raw_schedules WHERE schedule_date>=? AND schedule_date<=? ORDER BY schedule_date",
+            (start, end)
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT schedule_date, employee_name, shift_name FROM raw_schedules ORDER BY schedule_date"
+        ).fetchall()
+
+    schedule_map = {}
+    date_set = set()
+    for r in rows:
+        schedule_map[(r["schedule_date"], r["employee_name"])] = r["shift_name"]
+        date_set.add(r["schedule_date"])
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "原始排班表"
+
+    ws.cell(row=1, column=1, value="日期")
+    ws.cell(row=1, column=2, value="员工")
+    ws.cell(row=1, column=3, value="所属团队")
+    ws.cell(row=1, column=4, value="班次")
+
+    sorted_dates = sorted(date_set)
+    row_idx = 2
+    for d in sorted_dates:
+        for emp in employees:
+            shift = schedule_map.get((d, emp["name"]), "未排班")
+            ws.cell(row=row_idx, column=1, value=d)
+            ws.cell(row=row_idx, column=2, value=emp["name"])
+            ws.cell(row=row_idx, column=3, value=emp["team"])
+            ws.cell(row=row_idx, column=4, value=shift)
+            row_idx += 1
+
+    ws.column_dimensions["A"].width = 14
+    ws.column_dimensions["B"].width = 12
+    ws.column_dimensions["C"].width = 12
+    ws.column_dimensions["D"].width = 10
+
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    wb.save(tmp.name)
+    tmp.close()
+    return send_file(tmp.name, as_attachment=True, download_name="原始排班数据.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 # ==================== 工作安排 API ====================
 
 @app.route("/api/assignments", methods=["GET"])
@@ -922,6 +1204,226 @@ def _parse_date(val):
     except ValueError:
         pass
     return ""
+
+
+# ==================== 月度时长统计 API ====================
+
+@app.route("/api/monthly-hours-stats", methods=["GET"])
+def api_monthly_hours_stats():
+    year = request.args.get("year", "")
+    month = request.args.get("month", "")
+    work_system = request.args.get("work_system", "").strip()
+    teams_str = request.args.get("teams", "").strip()
+
+    now = datetime.now()
+    if not year:
+        year = str(now.year)
+    if not month:
+        month = str(now.month)
+
+    year_int = int(year)
+    month_int = int(month)
+    import calendar
+    last_day = calendar.monthrange(year_int, month_int)[1]
+    start_date = f"{year_int}-{month_int:02d}-01"
+    end_date = f"{year_int}-{month_int:02d}-{last_day}"
+
+    db = get_db()
+
+    query = "SELECT id, name, team, dongfu_id, work_hour_system FROM employees WHERE status='active'"
+    params = []
+    if work_system:
+        query += " AND work_hour_system = ?"
+        params.append(work_system)
+    teams = [t.strip() for t in teams_str.split(",") if t.strip()]
+    if teams:
+        placeholders = ",".join("?" for _ in teams)
+        query += f" AND team IN ({placeholders})"
+        params.extend(teams)
+    query += " ORDER BY id"
+    employees = db.execute(query, params).fetchall()
+
+    shifts = db.execute("SELECT id, name, work_hours FROM shifts").fetchall()
+    shift_map = {s["name"]: {"id": s["id"], "work_hours": s["work_hours"]} for s in shifts}
+
+    schedules = db.execute(
+        "SELECT employee_name, shift_name FROM schedules WHERE schedule_date >= ? AND schedule_date <= ?",
+        (start_date, end_date)
+    ).fetchall()
+
+    emp_shifts = {}
+    for s in schedules:
+        emp = s["employee_name"]
+        shift = s["shift_name"]
+        if emp not in emp_shifts:
+            emp_shifts[emp] = {}
+        emp_shifts[emp][shift] = emp_shifts[emp].get(shift, 0) + 1
+
+    results = []
+    for emp in employees:
+        name = emp["name"]
+        shifts_count = emp_shifts.get(name, {})
+
+        total_hours = 0.0
+        total_days = 0
+        for shift_name, days in shifts_count.items():
+            info = shift_map.get(shift_name)
+            if info and "SHF001" <= info["id"] <= "SHF006":
+                total_hours += info["work_hours"] * days
+                total_days += days
+
+        work_system = (emp["work_hour_system"] or "").strip()
+        if work_system == "综合计算工时制":
+            system_hours = 167.0
+        else:
+            system_hours = 8.0 * total_days
+
+        diff = round(total_hours - system_hours, 1)
+
+        results.append({
+            "dongfu_id": emp["dongfu_id"] or "",
+            "name": name,
+            "team": emp["team"] or "",
+            "work_system": work_system,
+            "scheduled_hours": round(total_hours, 1),
+            "system_hours": round(system_hours, 1),
+            "diff": diff
+        })
+
+    # 返回所有可选团队（用于筛选器）
+    all_teams = db.execute("SELECT DISTINCT team FROM employees WHERE status='active' ORDER BY team").fetchall()
+    team_list = [r["team"] for r in all_teams]
+
+    return jsonify({"rows": results, "teams": team_list})
+
+
+@app.route("/api/monthly-hours-stats/export", methods=["GET"])
+def api_monthly_hours_stats_export():
+    year = request.args.get("year", "")
+    month = request.args.get("month", "")
+    work_system = request.args.get("work_system", "").strip()
+    teams_str = request.args.get("teams", "").strip()
+
+    now = datetime.now()
+    if not year:
+        year = str(now.year)
+    if not month:
+        month = str(now.month)
+
+    year_int = int(year)
+    month_int = int(month)
+    import calendar
+    last_day = calendar.monthrange(year_int, month_int)[1]
+    start_date = f"{year_int}-{month_int:02d}-01"
+    end_date = f"{year_int}-{month_int:02d}-{last_day}"
+
+    db = get_db()
+
+    query = "SELECT id, name, team, dongfu_id, work_hour_system FROM employees WHERE status='active'"
+    params = []
+    if work_system:
+        query += " AND work_hour_system = ?"
+        params.append(work_system)
+    teams = [t.strip() for t in teams_str.split(",") if t.strip()]
+    if teams:
+        placeholders = ",".join("?" for _ in teams)
+        query += f" AND team IN ({placeholders})"
+        params.extend(teams)
+    query += " ORDER BY id"
+    employees = db.execute(query, params).fetchall()
+
+    shifts = db.execute("SELECT id, name, work_hours FROM shifts").fetchall()
+    shift_map = {s["name"]: {"id": s["id"], "work_hours": s["work_hours"]} for s in shifts}
+
+    schedules = db.execute(
+        "SELECT employee_name, shift_name FROM schedules WHERE schedule_date >= ? AND schedule_date <= ?",
+        (start_date, end_date)
+    ).fetchall()
+
+    emp_shifts = {}
+    for s in schedules:
+        emp = s["employee_name"]
+        shift = s["shift_name"]
+        if emp not in emp_shifts:
+            emp_shifts[emp] = {}
+        emp_shifts[emp][shift] = emp_shifts[emp].get(shift, 0) + 1
+
+    TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"]
+
+    results = []
+    for emp in employees:
+        name = emp["name"]
+        shifts_count = emp_shifts.get(name, {})
+
+        total_hours = 0.0
+        total_days = 0
+        for shift_name, days in shifts_count.items():
+            info = shift_map.get(shift_name)
+            if info and "SHF001" <= info["id"] <= "SHF006":
+                total_hours += info["work_hours"] * days
+                total_days += days
+
+        ws = (emp["work_hour_system"] or "").strip()
+        if ws == "综合计算工时制":
+            system_hours = 167.0
+        else:
+            system_hours = 8.0 * total_days
+
+        diff = round(total_hours - system_hours, 1)
+
+        results.append({
+            "team": emp["team"] or "",
+            "dongfu_id": emp["dongfu_id"] or "",
+            "name": name,
+            "scheduled_hours": round(total_hours, 1),
+            "system_hours": round(system_hours, 1),
+            "diff": diff
+        })
+
+    # 排序
+    results.sort(key=lambda r: (TEAM_ORDER.index(r["team"]) if r["team"] in TEAM_ORDER else 999, r["name"]))
+
+    # 生成 Excel
+    wb = Workbook()
+    ws_sheet = wb.active
+    ws_sheet.title = f"{year_int}年{month_int}月时长统计"
+    ws_sheet.append(["所属团队", "东福工号", "员工姓名", "当月排班时长(h)", "工时制度时长(h)", "差额(h)"])
+
+    # 团队列颜色
+    team_colors = {
+        "在线组": "c6efce", "热线组": "b4d6fd", "售后组": "fcd5a7",
+        "综合组": "e4c6ec", "VIP组": "f7c6d7", "质检组": "fce9a2", "支持组": "b9e4e0"
+    }
+    from openpyxl.styles import PatternFill, Font
+
+    for row in results:
+        ws_sheet.append([row["team"], row["dongfu_id"], row["name"],
+                         row["scheduled_hours"], row["system_hours"], row["diff"]])
+        r = ws_sheet.max_row
+        color = team_colors.get(row["team"])
+        if color:
+            ws_sheet.cell(row=r, column=1).fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+        # 差额颜色
+        diff_cell = ws_sheet.cell(row=r, column=6)
+        if row["diff"] > 0:
+            diff_cell.font = Font(color="10b981", bold=True)
+        elif row["diff"] < 0:
+            diff_cell.font = Font(color="ef4444", bold=True)
+
+    ws_sheet.column_dimensions["A"].width = 12
+    ws_sheet.column_dimensions["B"].width = 14
+    ws_sheet.column_dimensions["C"].width = 12
+    ws_sheet.column_dimensions["D"].width = 18
+    ws_sheet.column_dimensions["E"].width = 18
+    ws_sheet.column_dimensions["F"].width = 12
+
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    wb.save(tmp.name)
+    tmp.close()
+    return send_file(tmp.name, as_attachment=True,
+                     download_name=f"月度时长统计_{year_int}年{month_int}月.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # ==================== 数据库管理 ====================

@@ -36,6 +36,13 @@
             background: rgba(99, 102, 241, 0.25); color: #a5b4fc; font-weight: 600;
         }
 
+        .nav-group .nav-group-toggle { cursor: pointer; }
+        .nav-group .nav-group-toggle::after { content: ' ▾'; font-size: 0.7rem; margin-left: auto; }
+        .nav-group.open .nav-group-toggle::after { content: ' ▴'; }
+        .nav-submenu { display: none; }
+        .nav-group.open .nav-submenu { display: block; }
+        .nav-sub-item { padding-left: 48px !important; font-size: 0.92rem !important; }
+
         /* ===== 主内容区 ===== */
         .main-area {
             flex: 1; display: flex; flex-direction: column; min-width: 0;
@@ -245,13 +252,24 @@
     <div class="sidebar-logo">客服排班系统</div>
     <nav class="sidebar-nav">
         <a class="nav-item" data-page="overview" href="总览.html">总览</a>
-        <a class="nav-item" data-page="schedule" href="排班表.html">排班表</a>
+        <div class="nav-group">
+            <div class="nav-item nav-group-toggle" data-page="schedule-group">排班表</div>
+            <div class="nav-submenu">
+                <a class="nav-item nav-sub-item" data-page="schedule" href="排班表.html">排班表</a>
+                <a class="nav-item nav-sub-item" data-page="raw-schedule" href="原始排班.html">原始排班</a>
+            </div>
+        </div>
         <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
         <a class="nav-item" data-page="leave" href="调休管理.html">调休管理</a>
         <a class="nav-item active" data-page="employees">员工管理</a>
         <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
         <a class="nav-item" data-page="notify" href="通知设置.html">通知设置</a>
-        <a class="nav-item" data-page="stats">排班统计</a>
+        <div class="nav-group">
+            <div class="nav-item nav-group-toggle" data-page="stats">排班统计</div>
+            <div class="nav-submenu">
+                <a class="nav-item nav-sub-item" data-page="monthly-hours" href="月度时长统计.html">月度时长统计</a>
+            </div>
+        </div>
     </nav>
 </aside>
 
@@ -915,9 +933,17 @@
         document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 const page = item.getAttribute('data-page');
+                if(page === 'schedule-group') {
+                    item.closest('.nav-group').classList.toggle('open');
+                    return;
+                }
                 if(page === 'employees') return;
                 if(page === 'overview') {
                     window.location.href = '总览.html';
+                    return;
+                }
+                if(page === 'raw-schedule') {
+                    window.location.href = '原始排班.html';
                     return;
                 }
                 if(page === 'schedule') {
@@ -938,6 +964,14 @@
                 }
                 if(page === 'notify') {
                     window.location.href = '通知设置.html';
+                    return;
+                }
+                if(page === 'monthly-hours') {
+                    window.location.href = '月度时长统计.html';
+                    return;
+                }
+                if(page === 'stats') {
+                    item.closest('.nav-group').classList.toggle('open');
                     return;
                 }
                 e.preventDefault();

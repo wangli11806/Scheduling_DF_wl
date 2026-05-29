@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>客服排班系统</title>
+    <title>客服排班系统 - 原始排班</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
     <style>
@@ -400,8 +400,8 @@
         <div class="nav-group open">
             <div class="nav-item nav-group-toggle" data-page="schedule-group">排班表</div>
             <div class="nav-submenu">
-                <a class="nav-item nav-sub-item active" data-page="schedule" href="排班表.html">排班表</a>
-                <a class="nav-item nav-sub-item" data-page="raw-schedule" href="原始排班.html">原始排班</a>
+                <a class="nav-item nav-sub-item" data-page="schedule" href="排班表.html">排班表</a>
+                <a class="nav-item nav-sub-item active" data-page="raw-schedule">原始排班</a>
             </div>
         </div>
         <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
@@ -422,7 +422,7 @@
 <div class="main-area">
 
     <div class="header-bar">
-        <h1>排班表</h1>
+        <h1>原始排班</h1>
         <div class="header-right">
             <div class="view-toggle">
                 <button class="view-btn" data-view="day">日视图</button>
@@ -653,7 +653,7 @@
         return data.map(e => ({ name: e.name, team: e.team, position: e.position }));
     }
     async function loadSchedules() {
-        const data = await apiGet('/schedules');
+        const data = await apiGet('/raw-schedules');
         scheduleMap.clear();
         data.forEach(r => {
             scheduleMap.set(`${r.schedule_date}|${r.employee_name}`, r.shift_name);
@@ -716,8 +716,8 @@
 
     function exportToExcel() {
         const link = document.createElement('a');
-        link.href = API_BASE + '/schedules/export';
-        link.download = `排班数据_${formatDate(new Date())}.xlsx`;
+        link.href = API_BASE + '/raw-schedules/export';
+        link.download = `原始排班数据_${formatDate(new Date())}.xlsx`;
         link.click();
         showToast("导出完成");
     }
@@ -739,7 +739,7 @@
         ws['!cols'] = [{wch: 10}].concat(Array(31).fill({wch: 5}));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "排班表");
-        XLSX.writeFile(wb, "排班导入模板.xlsx");
+        XLSX.writeFile(wb, "原始排班导入模板.xlsx");
         showToast("模板已下载");
     }
 
@@ -761,7 +761,7 @@
                 catch (_) { return { error: text.substring(0, 100) }; }
             }
 
-            let res = await fetch(API_BASE + '/schedules/import-matrix', { method: 'POST', body: formData });
+            let res = await fetch(API_BASE + '/raw-schedules/import-matrix', { method: 'POST', body: formData });
             let data = await safeJson(res);
             const matrixError = !res.ok ? (data.error || '') : '';
             let usedFallback = false;
@@ -769,7 +769,7 @@
                 if (data.error && data.error.includes("未识别到日期列")) {
                     const formData2 = new FormData();
                     formData2.append('file', file);
-                    res = await fetch(API_BASE + '/schedules/import', { method: 'POST', body: formData2 });
+                    res = await fetch(API_BASE + '/raw-schedules/import', { method: 'POST', body: formData2 });
                     data = await safeJson(res);
                     usedFallback = true;
                 }
@@ -1238,7 +1238,7 @@
         if (!selected) { hideShiftPopover(); return; }
         const newShift = selected.getAttribute("data-shift");
         try {
-            await apiPost('/schedules/batch', { entries: [{ date: popoverTarget.date, employee: popoverTarget.employeeName, shift: newShift }] });
+            await apiPost('/raw-schedules/batch', { entries: [{ date: popoverTarget.date, employee: popoverTarget.employeeName, shift: newShift }] });
             setShift(popoverTarget.date, popoverTarget.employeeName, newShift);
             renderCurrentView();
             showToast(`${popoverTarget.employeeName} ${popoverTarget.date} → ${newShift}`);
@@ -1296,7 +1296,7 @@
             cur.setDate(cur.getDate() + 1);
         }
         try {
-            await apiPost('/schedules/batch', { entries });
+            await apiPost('/raw-schedules/batch', { entries });
             renderCurrentView();
             showToast(`已为 ${modalSelectedEmployees.length} 名员工更新 ${entries.length} 条排班记录为 ${shift}`);
         } catch(e) {
@@ -1478,13 +1478,13 @@
                 const page = item.getAttribute('data-page');
                 if(page === 'schedule-group') {
                     item.closest('.nav-group').classList.toggle('open');
-                } else if(page === 'schedule') {
+                } else if(page === 'raw-schedule') {
                     document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
                     item.classList.add('active');
-                } else if(page === 'raw-schedule') {
-                    window.location.href = '原始排班.html';
                 } else if(page === 'overview') {
                     window.location.href = '总览.html';
+                } else if(page === 'schedule') {
+                    window.location.href = '排班表.html';
                 } else if(page === 'employees') {
                     window.location.href = '员工管理.html';
                 } else if(page === 'shifts') {
