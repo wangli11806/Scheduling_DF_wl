@@ -295,6 +295,14 @@
                     </div>
                 </div>
             </div>
+            <div class="filter-field">
+                <label>工时制度</label>
+                <select id="filterWorkHourSystem">
+                    <option value="">全部</option>
+                    <option value="标准工时制">标准工时制</option>
+                    <option value="综合计算工时制">综合计算工时制</option>
+                </select>
+            </div>
             <div class="filter-field" style="width:auto;">
                 <label>员工状态</label>
                 <div class="status-tabs" id="filterStatusTabs">
@@ -324,6 +332,7 @@
                         <th>姓名</th>
                         <th>团队</th>
                         <th>岗位</th>
+                        <th>工时制度</th>
                         <th>上级</th>
                         <th>入职日期</th>
                         <th style="text-align:center;">状态</th>
@@ -371,6 +380,14 @@
                 <option value="客服">客服</option>
                 <option value="主管">主管</option>
                 <option value="其他">其他</option>
+            </select>
+        </div>
+        <div class="modal-row">
+            <label>工时制度 <span style="font-weight:400;color:#94a3b8;">（选填）</span></label>
+            <select id="modalWorkHourSystem">
+                <option value="">请选择工时制度</option>
+                <option value="标准工时制">标准工时制</option>
+                <option value="综合计算工时制">综合计算工时制</option>
             </select>
         </div>
         <div class="modal-row">
@@ -461,6 +478,7 @@
     let filterName = '';
     let filterTeam = '';
     let filterStatus = '';
+    let filterWorkHourSystem = '';
     let filterPositions = [];
 
     function getFilteredEmployees() {
@@ -469,7 +487,8 @@
             const matchTeam = !filterTeam || e.team === filterTeam;
             const matchStatus = !filterStatus || e.status === filterStatus;
             const matchPosition = filterPositions.length === 0 || filterPositions.includes(e.position);
-            return matchName && matchTeam && matchStatus && matchPosition;
+            const matchWHS = !filterWorkHourSystem || e.work_hour_system === filterWorkHourSystem;
+            return matchName && matchTeam && matchStatus && matchPosition && matchWHS;
         });
     }
 
@@ -501,7 +520,7 @@
         document.getElementById("tableInfo").textContent = `共 ${filtered.length} 名员工`;
 
         if(filtered.length === 0) {
-            tbody.innerHTML = `<tr class="empty-row"><td colspan="9">暂无匹配的员工数据</td></tr>`;
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="10">暂无匹配的员工数据</td></tr>`;
             return;
         }
 
@@ -512,6 +531,7 @@
                 <td style="font-weight:600;">${e.name}</td>
                 <td><span class="team-badge">${e.team}</span></td>
                 <td><span class="pos-badge ${e.position==='客服'?'agent':'manager'}">${e.position}</span></td>
+                <td>${e.work_hour_system || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td>${e.supervisor || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td>${e.entry_date || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td style="text-align:center;">
@@ -550,6 +570,7 @@
         document.getElementById("modalDongfuId").value = '';
         document.getElementById("modalTeam").value = '';
         document.getElementById("modalPosition").value = '';
+        document.getElementById("modalWorkHourSystem").value = '';
         document.getElementById("modalEntryDate").value = '';
         document.getElementById("modalStatus").checked = true;
         document.getElementById("modalStatusLabel").textContent = '正常';
@@ -566,6 +587,7 @@
         document.getElementById("modalDongfuId").value = emp.dongfu_id || '';
         document.getElementById("modalTeam").value = emp.team;
         document.getElementById("modalPosition").value = emp.position;
+        document.getElementById("modalWorkHourSystem").value = emp.work_hour_system || '';
         document.getElementById("modalEntryDate").value = emp.entry_date || '';
         document.getElementById("modalStatus").checked = emp.status !== 'inactive';
         document.getElementById("modalStatusLabel").textContent = emp.status === 'inactive' ? '失效' : '正常';
@@ -583,6 +605,7 @@
         const dongfuId = document.getElementById("modalDongfuId").value.trim();
         const team = document.getElementById("modalTeam").value;
         const position = document.getElementById("modalPosition").value;
+        const workHourSystem = document.getElementById("modalWorkHourSystem").value;
         const supervisor = document.getElementById("modalSupervisor").value;
         const entryDate = document.getElementById("modalEntryDate").value;
         const status = document.getElementById("modalStatus").checked ? 'active' : 'inactive';
@@ -592,10 +615,10 @@
         if(!position) { showToast("请选择岗位"); return; }
         try {
             if(editingEmpId) {
-                await apiPut('/employees/' + editingEmpId, { name, dongfuId, team, position, supervisor, entryDate, status });
+                await apiPut('/employees/' + editingEmpId, { name, dongfuId, team, position, workHourSystem, supervisor, entryDate, status });
                 showToast("员工信息已更新");
             } else {
-                await apiPost('/employees', { name, dongfuId, team, position, supervisor, entryDate, status });
+                await apiPost('/employees', { name, dongfuId, team, position, workHourSystem, supervisor, entryDate, status });
                 showToast("员工已创建");
             }
             closeEmployeeModal();
@@ -808,9 +831,11 @@
             filterName = '';
             filterTeam = '';
             filterStatus = '';
+            filterWorkHourSystem = '';
             filterPositions = [];
             document.getElementById("filterName").value = '';
             document.getElementById("filterTeam").value = '';
+            document.getElementById("filterWorkHourSystem").value = '';
             document.querySelectorAll("#filterStatusTabs .status-tab").forEach(tab => {
                 tab.classList.toggle("active", tab.getAttribute("data-value") === "");
             });
@@ -822,6 +847,7 @@
         document.getElementById("queryBtn").addEventListener("click", () => {
             filterName = document.getElementById("filterName").value.trim();
             filterTeam = document.getElementById("filterTeam").value;
+            filterWorkHourSystem = document.getElementById("filterWorkHourSystem").value;
             renderTable();
             showToast("筛选完成");
         });

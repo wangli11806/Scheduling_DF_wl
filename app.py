@@ -36,16 +36,11 @@ class _Tee:
 
 
 def _rotate_log(path):
-    """启动时轮转旧日志，追加时间戳后缀"""
-    if os.path.exists(path):
-        mtime = os.path.getmtime(path)
-        ts = datetime.fromtimestamp(mtime).strftime("%Y%m%dT%H%M%S")
-        base, ext = os.path.splitext(path)
-        rotated = f"{base}-{ts}{ext}"
-        try:
-            os.rename(path, rotated)
-        except OSError:
-            pass
+    """启动时清除旧日志内容"""
+    try:
+        open(path, "w").close()
+    except OSError:
+        pass
 
 
 def setup_logging():
@@ -90,9 +85,10 @@ def init_db():
             name        TEXT NOT NULL UNIQUE,
             team        TEXT NOT NULL,
             position    TEXT NOT NULL DEFAULT '客服',
-            supervisor  TEXT DEFAULT '',
-            dongfu_id   TEXT DEFAULT '',
-            entry_date  TEXT NOT NULL,
+            supervisor     TEXT DEFAULT '',
+            dongfu_id      TEXT DEFAULT '',
+            work_hour_system TEXT DEFAULT '',
+            entry_date     TEXT NOT NULL,
             status      TEXT NOT NULL DEFAULT 'active',
             created_at  TEXT DEFAULT (datetime('now','localtime')),
             updated_at  TEXT DEFAULT (datetime('now','localtime'))
@@ -144,6 +140,13 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
+    # 迁移：为已有数据库添加 work_hour_system 列
+    try:
+        db.execute("ALTER TABLE employees ADD COLUMN work_hour_system TEXT DEFAULT ''")
+        db.commit()
+    except sqlite3.OperationalError:
+        pass
+
     # 写入默认数据
     cur = db.execute("SELECT COUNT(*) FROM employees")
     if cur.fetchone()[0] == 0:
@@ -191,6 +194,7 @@ def api_employees_create():
     supervisor = (data.get("supervisor") or "").strip()
     entry_date = (data.get("entryDate") or "").strip()
     dongfu_id = (data.get("dongfuId") or "").strip()
+    work_hour_system = (data.get("workHourSystem") or "").strip()
     status = (data.get("status") or "active").strip()
 
     if not name:
@@ -210,8 +214,8 @@ def api_employees_create():
     emp_id = f"EMP{next_id:03d}"
 
     db.execute(
-        "INSERT INTO employees(id, name, team, position, supervisor, entry_date, dongfu_id, status) VALUES(?,?,?,?,?,?,?,?)",
-        (emp_id, name, team, position, supervisor, entry_date, dongfu_id, status)
+        "INSERT INTO employees(id, name, team, position, supervisor, entry_date, dongfu_id, work_hour_system, status) VALUES(?,?,?,?,?,?,?,?,?)",
+        (emp_id, name, team, position, supervisor, entry_date, dongfu_id, work_hour_system, status)
     )
     db.commit()
     row = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
@@ -235,6 +239,9 @@ def api_employees_update(emp_id):
     if entry_date: entry_date = entry_date.strip()
     dongfu_id = data.get("dongfuId") if "dongfuId" in data else emp["dongfu_id"]
     if dongfu_id: dongfu_id = dongfu_id.strip()
+    work_hour_system = data.get("workHourSystem") if "workHourSystem" in data else emp.get("work_hour_system", "")
+    if work_hour_system: work_hour_system = work_hour_system.strip()
+    else: work_hour_system = ""
     status = (data.get("status") or "").strip() or emp.get("status", "active")
 
     if not name:
@@ -246,8 +253,8 @@ def api_employees_update(emp_id):
 
     old_name = emp["name"]
     db.execute(
-        "UPDATE employees SET name=?, team=?, position=?, supervisor=?, entry_date=?, dongfu_id=?, status=?, updated_at=datetime('now','localtime') WHERE id=?",
-        (name, team, position, supervisor or "", entry_date or "", dongfu_id or "", status, emp_id)
+        "UPDATE employees SET name=?, team=?, position=?, supervisor=?, entry_date=?, dongfu_id=?, work_hour_system=?, status=?, updated_at=datetime('now','localtime') WHERE id=?",
+        (name, team, position, supervisor or "", entry_date or "", dongfu_id or "", work_hour_system, status, emp_id)
     )
     # 如果改了名字，同步更新上下级引用和排班记录
     if old_name != name:
@@ -282,6 +289,7 @@ def api_employees_import():
     sup_idx = next((i for i, h in enumerate(header) if "上级" in h), -1)
     date_idx = next((i for i, h in enumerate(header) if "入职" in h or "日期" in h), -1)
     dongfu_idx = next((i for i, h in enumerate(header) if "东福" in h or "工号" in h), -1)
+    whs_idx = next((i for i, h in enumerate(header) if "工时" in h or "工时制度" in h), -1)
     status_idx = next((i for i, h in enumerate(header) if "状态" in h), -1)
 
     db = get_db()
@@ -304,6 +312,7 @@ def api_employees_import():
         supervisor = ""
         entry_date = ""
         dongfu_id = ""
+        work_hour_system = ""
         status = "active"
         if sup_idx >= 0:
             try:
@@ -319,6 +328,11 @@ def api_employees_import():
         if dongfu_idx >= 0:
             try:
                 dongfu_id = str(row[dongfu_idx] or "").strip()
+            except IndexError:
+                pass
+        if whs_idx >= 0:
+            try:
+                work_hour_system = str(row[whs_idx] or "").strip()
             except IndexError:
                 pass
         if status_idx >= 0:
@@ -339,8 +353,8 @@ def api_employees_import():
         emp_id = f"EMP{next_id:03d}"
 
         db.execute(
-            "INSERT INTO employees(id, name, team, position, supervisor, entry_date, dongfu_id, status) VALUES(?,?,?,?,?,?,?,?)",
-            (emp_id, name, team, position, supervisor, entry_date, dongfu_id, status)
+            "INSERT INTO employees(id, name, team, position, supervisor, entry_date, dongfu_id, work_hour_system, status) VALUES(?,?,?,?,?,?,?,?,?)",
+            (emp_id, name, team, position, supervisor, entry_date, dongfu_id, work_hour_system, status)
         )
         success += 1
 
@@ -355,14 +369,15 @@ def api_employees_template():
     wb = Workbook()
     ws = wb.active
     ws.title = "员工导入模板"
-    ws.append(["姓名", "东福工号", "团队", "岗位", "上级", "入职日期", "状态"])
+    ws.append(["姓名", "东福工号", "团队", "岗位", "工时制度", "上级", "入职日期", "状态"])
     ws.column_dimensions["A"].width = 12
     ws.column_dimensions["B"].width = 14
     ws.column_dimensions["C"].width = 12
     ws.column_dimensions["D"].width = 10
-    ws.column_dimensions["E"].width = 12
-    ws.column_dimensions["F"].width = 14
-    ws.column_dimensions["G"].width = 10
+    ws.column_dimensions["E"].width = 14
+    ws.column_dimensions["F"].width = 12
+    ws.column_dimensions["G"].width = 14
+    ws.column_dimensions["H"].width = 10
 
     import tempfile
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
