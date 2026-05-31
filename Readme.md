@@ -10,7 +10,8 @@ pip install -r requirements.txt
 python app.py
 
 # 3. 打开浏览器
-# http://127.0.0.1:5000
+# 本地：http://127.0.0.1:5000
+# 云服务器：http://115.29.235.170:5000
 ```
 
 首次启动自动创建 `schedule.db` 并写入默认员工和班次数据。
