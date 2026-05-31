@@ -12,11 +12,28 @@ from datetime import datetime, date
 from flask import Flask, request, jsonify, g, send_file
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+import calendar
+
+try:
+    from chinese_calendar import is_workday
+except ImportError:
+    is_workday = None
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # 开发阶段禁用静态文件缓存
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schedule.db")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def count_working_days(year, month):
+    """返回指定月份的中国法定工作日天数（考虑节假日和调休）"""
+    days_in_month = calendar.monthrange(year, month)[1]
+    if is_workday is None:
+        # 降级方案：按周一至周五计算（不含中国节假日）
+        return sum(1 for d in range(1, days_in_month + 1)
+                   if date(year, month, d).weekday() < 5)
+    return sum(1 for d in range(1, days_in_month + 1)
+               if is_workday(date(year, month, d)))
 
 
 # ==================== 日志管理 ====================
@@ -1654,7 +1671,6 @@ def api_monthly_hours_stats():
 
     year_int = int(year)
     month_int = int(month)
-    import calendar
     last_day = calendar.monthrange(year_int, month_int)[1]
     start_date = f"{year_int}-{month_int:02d}-01"
     end_date = f"{year_int}-{month_int:02d}-{last_day}"
@@ -1707,7 +1723,7 @@ def api_monthly_hours_stats():
         if work_system == "综合计算工时制":
             system_hours = 167.0
         else:
-            system_hours = 8.0 * total_days
+            system_hours = 8.0 * count_working_days(year_int, month_int)
 
         diff = round(total_hours - system_hours, 1)
 
@@ -1743,7 +1759,6 @@ def api_monthly_hours_stats_export():
 
     year_int = int(year)
     month_int = int(month)
-    import calendar
     last_day = calendar.monthrange(year_int, month_int)[1]
     start_date = f"{year_int}-{month_int:02d}-01"
     end_date = f"{year_int}-{month_int:02d}-{last_day}"
@@ -1798,7 +1813,7 @@ def api_monthly_hours_stats_export():
         if ws == "综合计算工时制":
             system_hours = 167.0
         else:
-            system_hours = 8.0 * total_days
+            system_hours = 8.0 * count_working_days(year_int, month_int)
 
         diff = round(total_hours - system_hours, 1)
 
@@ -1818,7 +1833,7 @@ def api_monthly_hours_stats_export():
     wb = Workbook()
     ws_sheet = wb.active
     ws_sheet.title = f"{year_int}年{month_int}月时长统计"
-    ws_sheet.append(["所属团队", "东福工号", "员工姓名", "当月排班时长(h)", "工时制度时长(h)", "差额(h)"])
+    ws_sheet.append(["所属团队", "东福工号", "员工姓名", "原始排班时长(h)", "工时制度时长(h)", "差额(h)"])
 
     # 团队列颜色
     team_colors = {
