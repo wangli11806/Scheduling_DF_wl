@@ -9,60 +9,8 @@
     <title>客服排班系统 - 原始排班</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="shared.css">
     <style>
-        * { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
-        body {
-            background: #f1f5f9; margin: 0; padding: 0;
-            display: flex; min-height: 100vh;
-            font-size: 13px; color: #1e293b;
-        }
-
-        /* ===== 左侧菜单栏 ===== */
-        .sidebar {
-            width: 190px; min-width: 190px; background: #1e293b; color: #e2e8f0;
-            display: flex; flex-direction: column;
-            box-shadow: 2px 0 12px rgba(0,0,0,0.08);
-            position: sticky; top: 0; height: 100vh; overflow-y: auto;
-        }
-        .sidebar-logo {
-            padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
-            font-size: 1.15rem; font-weight: 700; color: white; letter-spacing: 0.5px;
-        }
-        .sidebar-nav { padding: 8px 0; flex: 1; }
-        .sidebar-nav .nav-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 13px 18px; margin: 3px 10px; border-radius: 10px;
-            font-size: 1rem; cursor: pointer; transition: all 0.15s;
-            color: #cbd5e1; text-decoration: none; user-select: none;
-        }
-        .sidebar-nav .nav-item:hover { background: rgba(255,255,255,0.06); color: white; }
-        .sidebar-nav .nav-item.active {
-            background: rgba(99, 102, 241, 0.25); color: #a5b4fc; font-weight: 600;
-        }
-
-        .nav-group .nav-group-toggle { cursor: pointer; }
-        .nav-group .nav-group-toggle::after { content: ' ▾'; font-size: 0.7rem; margin-left: auto; }
-        .nav-group.open .nav-group-toggle::after { content: ' ▴'; }
-        .nav-submenu { display: none; }
-        .nav-group.open .nav-submenu { display: block; }
-        .nav-sub-item { padding-left: 48px !important; font-size: 0.92rem !important; }
-
-        /* ===== 主内容区 ===== */
-        .main-area {
-            flex: 1; display: flex; flex-direction: column; min-width: 0;
-        }
-        .header-bar {
-            background: white; padding: 14px 28px;
-            display: flex; align-items: center; justify-content: space-between;
-            gap: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-            border-bottom: 1px solid #e8ecf1;
-        }
-        .header-bar h1 {
-            font-size: 1.15rem; font-weight: 700; color: #1e293b; margin: 0; white-space: nowrap;
-        }
-        .header-right {
-            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-        }
         .view-toggle { display: flex; background: #eef2ff; border-radius: 60px; padding: 3px; gap: 2px; }
         .view-btn {
             border: none; background: transparent; padding: 7px 20px; border-radius: 40px;
@@ -81,100 +29,7 @@
             font-size: 0.92rem; min-width: 180px; text-align: center;
         }
 
-        .content-body { flex: 1; padding: 20px 28px; overflow-x: hidden; }
-
-        /* 筛选区域 */
-        .filter-area {
-            background: white; border-radius: 16px; padding: 16px 20px; margin-bottom: 16px;
-            display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.03); border: 1px solid #e8ecf1;
-        }
-        .filter-field { display: flex; flex-direction: column; gap: 5px; width: 360px; }
-        .filter-field label { font-size: 0.92rem; font-weight: 600; color: #64748b; }
-        .status-radio-group {
-            display: inline-flex; gap: 2px; background: #eef2ff; border-radius: 60px; padding: 3px;
-        }
-        .status-radio {
-            display: inline-flex; align-items: center; padding: 5px 16px;
-            border-radius: 40px; font-size: 0.88rem; font-weight: 500; color: #64748b;
-            cursor: pointer; transition: all 0.15s; user-select: none;
-        }
-        .status-radio:has(input:checked) { background: white; color: #1e3a5f; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-        .status-radio input { display: none; }
-        .filter-buttons { display: flex; gap: 10px; align-items: flex-end; margin-left: auto; }
-        .filter-buttons .btn { min-width: 100px; justify-content: center; }
-
-        /* 多选下拉 */
-        .multi-select { position: relative; user-select: none; }
-        .multi-select-trigger {
-            display: block;
-            height: 34px; padding: 0 10px; border: 1px solid #cbd5e1;
-            border-radius: 10px; background: white; cursor: pointer; font-size: 0.92rem;
-            transition: border-color 0.15s;
-            overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-            line-height: 32px;
-        }
-        .multi-select-trigger:hover { border-color: #94a3b8; }
-        .multi-select.open .multi-select-trigger { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.12); }
-        .ms-tag {
-            display: inline-flex; align-items: center; gap: 2px;
-            background: #eef2ff; color: #3730a3; padding: 2px 7px; border-radius: 6px;
-            font-size: 0.85rem; font-weight: 500;
-        }
-        .ms-tag .ms-tag-x { cursor: pointer; font-size: 0.85rem; opacity: 0.6; }
-        .ms-tag .ms-tag-x:hover { opacity: 1; }
-        .ms-placeholder { color: #94a3b8; font-size: 0.92rem; }
-        .ms-dropdown {
-            display: none; position: fixed; z-index: 999;
-            background: white; border: 1px solid #e2e8f0; border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-height: 280px;
-            overflow: hidden;
-        }
-        .multi-select.open .ms-dropdown { display: block; }
-        .ms-search { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 6px; align-items: center; }
-        .ms-search input {
-            flex: 1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px;
-            font-size: 0.92rem; outline: none;
-        }
-        .ms-search input:focus { border-color: #6366f1; }
-        .ms-select-all {
-            font-size: 0.85rem; color: #6366f1; cursor: pointer; white-space: nowrap;
-            padding: 5px 10px; border-radius: 6px; font-weight: 600;
-            border: 1px solid #c7d2fe; background: #eef2ff;
-        }
-        .ms-select-all:hover { background: #e0e7ff; }
-        .ms-options { max-height: 180px; overflow-y: auto; padding: 4px 0; }
-        .ms-option {
-            display: flex; align-items: center; gap: 8px; padding: 7px 12px;
-            font-size: 0.92rem; cursor: pointer; transition: background 0.1s;
-        }
-        .ms-option:hover { background: #f8fafc; }
-        .ms-option input[type="checkbox"] { accent-color: #6366f1; }
-        .ms-actions {
-            display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid #e2e8f0;
-            justify-content: flex-end;
-        }
-
-        /* 按钮 */
-        .btn {
-            background: white; border: 1px solid #cbd5e1; padding: 7px 18px;
-            border-radius: 40px; font-weight: 500; font-size: 0.92rem; cursor: pointer;
-            transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px;
-            color: #1e293b; white-space: nowrap;
-        }
-        .btn:hover { background: #f8fafc; border-color: #94a3b8; }
-        .btn-primary { background: #2c3e66; border-color: #2c3e66; color: white; }
-        .btn-primary:hover { background: #1e2f4a; }
-        .btn-warning { background: #f59e0b; border-color: #f59e0b; color: white; }
-        .btn-warning:hover { background: #d97706; }
-        .btn-success { background: #10b981; border-color: #10b981; color: white; }
-        .btn-success:hover { background: #059669; }
-        .btn-sm { padding: 5px 12px; font-size: 0.85rem; }
-
-        /* 操作栏 */
-        .action-bar {
-            display: flex; gap: 12px; margin-bottom: 16px; align-items: center;
-        }
+        .filter-field { width: 360px; }
 
         /* 班次图例 */
         .shift-legend {
@@ -247,10 +102,10 @@
 
         /* 排班表格 */
         .schedule-table-wrapper {
-            overflow-x: auto; border-radius: 16px; background: white;
+            border-radius: 16px; background: white;
             box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid #edf2f7;
         }
-        .schedule-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; min-width: 700px; }
+        .schedule-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.92rem; min-width: 700px; }
         .schedule-table th {
             background: #f9fbfd; padding: 12px 6px; border-bottom: 1px solid #e2e8f0;
             font-weight: 700; color: #2c3e66; text-align: center; font-size: 0.92rem;
@@ -264,18 +119,36 @@
             padding: 6px 6px; background: #fafafa;
         }
 
-        /* 冻结左侧两列 */
+        /* 冻结左侧两列（水平偏移由 JS 动态设置 transform: translateX） */
         .schedule-table th:nth-child(1),
         .schedule-table td:nth-child(1) {
-            position: sticky; left: 0; z-index: 2;
+            position: relative; z-index: 2;
         }
         .schedule-table th:nth-child(2),
         .schedule-table td:nth-child(2) {
-            position: sticky; left: 90px; z-index: 2;
+            position: relative; z-index: 2;
         }
         .schedule-table thead th:nth-child(1),
         .schedule-table thead th:nth-child(2) {
-            z-index: 3;
+            z-index: 11;
+        }
+        /* 表头吸顶 */
+        .schedule-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: #f9fbfd;
+            transform: translateZ(0);
+        }
+        .schedule-table thead tr {
+            background: inherit;
+        }
+        .schedule-table thead th {
+            background-clip: padding-box;
+        }
+        .schedule-table thead th:nth-child(1),
+        .schedule-table thead th:nth-child(2) {
+            z-index: 11;
         }
 
         .shift-tag {
@@ -312,19 +185,6 @@
         .sort-icons .sort-asc.active, .sort-icons .sort-desc.active { color: #6366f1; }
 
         /* 弹窗 */
-        .modal-overlay {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(15, 23, 42, 0.45); z-index: 900;
-            align-items: center; justify-content: center;
-        }
-        .modal-overlay.active { display: flex; }
-        .modal-dialog {
-            background: white; border-radius: 24px; padding: 32px; width: 520px; max-width: 92vw;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-        }
-        .modal-title { font-size: 1.15rem; font-weight: 600; color: #1e293b; margin-bottom: 24px; }
-        .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
-        .modal-row label { font-size: 0.92rem; font-weight: 500; color: #475569; }
         .modal-row select, .modal-row input[type="date"] {
             padding: 10px 14px; border-radius: 16px; border: 1px solid #cbd5e1;
             background: white; font-size: 0.92rem; width: 100%;
@@ -363,31 +223,6 @@
         .radio-option input:checked + label.休息 { border-color: #9e9e9e; background: #f2f2f2; color: #616161; }
         .radio-option input:checked + label.放休 { border-color: #757575; background: #e0e0e0; color: #424242; }
         .radio-option input:checked + label.请假 { border-color: #bf360c; background: #fff3e0; color: #bf360c; }
-        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
-
-        .toast-msg {
-            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-            background: #1e293b; color: white; padding: 10px 24px; border-radius: 60px;
-            font-size: 0.92rem; z-index: 1000; box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-            transition: 0.2s; pointer-events: none;
-        }
-
-        @media (max-width: 860px) {
-            body { flex-direction: column; }
-            .sidebar {
-                width: 100%; min-width: auto; height: auto; position: relative;
-                flex-direction: row; flex-wrap: wrap; padding: 10px 14px; gap: 6px; align-items: center;
-            }
-            .sidebar-logo { padding: 0; border-bottom: none; }
-            .sidebar-nav { display: flex; padding: 0; gap: 4px; }
-            .sidebar-nav .nav-item { margin: 0; padding: 8px 12px; }
-            .header-bar { flex-direction: column; align-items: flex-start; }
-            .header-right { width: 100%; justify-content: space-between; }
-            .content-body { padding: 14px 12px; }
-            .filter-field { width: 100%; }
-            .filter-buttons { margin-left: 0; }
-            .modal-dialog { width: 96vw; padding: 24px; }
-        }
     </style>
 </head>
 <body>
@@ -619,22 +454,10 @@
     </div>
 </div>
 
+<script src="shared.js"></script>
 <script>
     // ========== 数据层（后端 API） ==========
-    const API_BASE = '/api';
     let scheduleMap = new Map();
-    const weekDayNames = ["日", "一", "二", "三", "四", "五", "六"];
-
-    async function apiGet(url) {
-        const res = await fetch(API_BASE + url);
-        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '请求失败'); }
-        return res.json();
-    }
-    async function apiPost(url, data) {
-        const res = await fetch(API_BASE + url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-        if (!res.ok) { const e = await res.json(); throw new Error(e.error || '操作失败'); }
-        return res.json();
-    }
 
     let shiftDataMap = {};  // name → {id, name, start_time, end_time, ...}
 
@@ -681,23 +504,6 @@
         if(teams.length === 0) return [];
         return employees.filter(e => teams.includes(e.team)).map(e => e.name);
     }
-
-    function getShiftClass(shift) {
-        if (!shift) return "shift-none";
-        const cls = "shift-" + shift;
-        return cls in {
-            "shift-A班":1,"shift-B班":1,"shift-C班":1,"shift-T班":1,
-            "shift-E班":1,"shift-F班":1,"shift-休息":1,"shift-放休":1,"shift-请假":1
-        } ? cls : "shift-none";
-    }
-
-    function formatDate(date) {
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-    }
-    function parseDate(str) { return new Date(str + "T00:00:00"); }
 
     function getFilteredEmployees() {
         return employees.filter(e =>
@@ -810,119 +616,6 @@
         } catch(e) {
             showToast('导入失败: ' + e.message);
         }
-    }
-
-    // ========== 多选下拉组件 ==========
-    function initMultiSelect(config) {
-        const { containerId, triggerId, searchId, selectAllId, optionsId, clearId, okId, getOptions, getSelected, setSelected, placeholder } = config;
-        const container = document.getElementById(containerId);
-        const trigger = document.getElementById(triggerId);
-        const searchInput = document.getElementById(searchId);
-        const selectAllBtn = document.getElementById(selectAllId);
-        const optionsContainer = document.getElementById(optionsId);
-
-        function renderTrigger() {
-            const sel = getSelected();
-            const allOpts = getOptions();
-            if(sel.length === 0) {
-                trigger.innerHTML = `<span class="ms-placeholder">${placeholder || '请选择'}</span>`;
-            } else if(sel.length === allOpts.length && allOpts.length > 0) {
-                trigger.innerHTML = `<span class="ms-placeholder" style="color:#3730a3;font-weight:500;">全部 (${allOpts.length})</span>`;
-            } else {
-                trigger.textContent = sel.join('、');
-                trigger.title = sel.join('、');
-            }
-        }
-
-        function renderDropdown() {
-            const sel = getSelected();
-            const q = searchInput.value.toLowerCase();
-            const allOpts = getOptions();
-            const opts = allOpts.filter(o => o.toLowerCase().includes(q));
-            if(sel.length === allOpts.length && allOpts.length > 0) {
-                selectAllBtn.textContent = '取消全选';
-            } else {
-                selectAllBtn.textContent = '全选';
-            }
-            optionsContainer.innerHTML = opts.map(o => {
-                const checked = sel.includes(o) ? 'checked' : '';
-                return `<label class="ms-option"><input type="checkbox" value="${o}" ${checked}> ${o}</label>`;
-            }).join('');
-            if(opts.length === 0) {
-                optionsContainer.innerHTML = `<div style="padding:16px;text-align:center;color:#94a3b8;">无匹配选项</div>`;
-            }
-            optionsContainer.querySelectorAll('input').forEach(cb => {
-                cb.addEventListener('change', () => {
-                    if(cb.checked) setSelected([...getSelected(), cb.value]);
-                    else setSelected(getSelected().filter(v => v !== cb.value));
-                    renderTrigger();
-                    if(config.onChange) config.onChange();
-                });
-            });
-        }
-
-        const dropdown = container.querySelector('.ms-dropdown');
-
-        function positionDropdown() {
-            const rect = trigger.getBoundingClientRect();
-            const dropdownH = dropdown.scrollHeight || 280;
-            const spaceBelow = window.innerHeight - rect.bottom;
-            const spaceAbove = rect.top;
-            if (spaceBelow < dropdownH && spaceAbove > spaceBelow) {
-                dropdown.style.top = Math.max(0, rect.top - Math.min(dropdownH, 280) - 4) + 'px';
-            } else {
-                dropdown.style.top = Math.min(rect.bottom + 4, window.innerHeight - Math.min(dropdownH, 280)) + 'px';
-            }
-            dropdown.style.left = Math.min(rect.left, window.innerWidth - 260) + 'px';
-            dropdown.style.width = Math.max(rect.width, 200) + 'px';
-        }
-
-        trigger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isOpen = container.classList.contains('open');
-            document.querySelectorAll('.multi-select.open').forEach(ms => ms.classList.remove('open'));
-            if(!isOpen) {
-                container.classList.add('open');
-                searchInput.value = '';
-                renderDropdown();
-                positionDropdown();
-                setTimeout(() => searchInput.focus(), 50);
-            }
-        });
-
-        searchInput.addEventListener('input', renderDropdown);
-        searchInput.addEventListener('click', e => e.stopPropagation());
-
-        selectAllBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const allOpts = getOptions();
-            if(getSelected().length === allOpts.length && allOpts.length > 0) {
-                setSelected([]);
-            } else {
-                setSelected([...allOpts]);
-            }
-            renderTrigger();
-            renderDropdown();
-            if(config.onChange) config.onChange();
-        });
-
-        document.getElementById(clearId).addEventListener('click', () => {
-            setSelected([]);
-            renderTrigger();
-            renderDropdown();
-            if(config.onChange) config.onChange();
-        });
-
-        document.getElementById(okId).addEventListener('click', () => {
-            container.classList.remove('open');
-        });
-
-        document.addEventListener('click', () => {
-            container.classList.remove('open');
-        });
-
-        renderTrigger();
-        return { renderTrigger, renderDropdown };
     }
 
     let msPageEmployee, msPageTeam, msPageShift;
@@ -1131,6 +824,9 @@
             ascEl.className = "sort-asc" + (teamSortState === 1 ? " active" : "");
             descEl.className = "sort-desc" + (teamSortState === 2 ? " active" : "");
         }
+        // 刷新冻结列缓存并复位偏移
+        updateFrozenCells();
+        handleFrozenScroll();
     }
 
     function renderLegend() {
@@ -1313,13 +1009,6 @@
         document.getElementById("addModal").classList.remove("active");
     }
 
-    function showToast(msg) {
-        const toast = document.getElementById("toastMsg");
-        toast.innerText = msg;
-        toast.style.display = "block";
-        setTimeout(() => { toast.style.display = "none"; }, 2500);
-    }
-
     async function resetFilter() {
         document.querySelector('input[name="filterStatus"][value="active"]').checked = true;
         employees = await loadEmployeesFromAPI('active');
@@ -1345,6 +1034,32 @@
         else if(currentView === "week") currentBaseDate.setDate(currentBaseDate.getDate() + 7);
         else currentBaseDate.setMonth(currentBaseDate.getMonth() + 1);
         renderCurrentView();
+    }
+
+    // ========== 冻结列：JS transform 替代 CSS sticky（避免 collapse 透明 Bug） ==========
+    let frozenCells = [];
+    let frozenScrollContainer = null;
+
+    function updateFrozenCells() {
+        const table = document.querySelector('.schedule-table');
+        if (!table) { frozenCells = []; return; }
+        frozenCells = Array.from(table.querySelectorAll('th:nth-child(1), td:nth-child(1), th:nth-child(2), td:nth-child(2)'));
+    }
+
+    function handleFrozenScroll() {
+        const sl = frozenScrollContainer ? frozenScrollContainer.scrollLeft : 0;
+        frozenCells.forEach(cell => {
+            cell.style.transform = sl > 0 ? 'translateX(' + sl + 'px)' : '';
+        });
+    }
+
+    let frozenRafId = null;
+    function onFrozenScroll() {
+        if (frozenRafId) return;
+        frozenRafId = requestAnimationFrame(() => {
+            frozenRafId = null;
+            handleFrozenScroll();
+        });
     }
 
     async function init() {
@@ -1504,6 +1219,13 @@
                 }
             });
         });
+
+        // 冻结列滚动监听
+        frozenScrollContainer = document.querySelector('.content-body');
+        if (frozenScrollContainer) {
+            frozenScrollContainer.addEventListener('scroll', onFrozenScroll, { passive: true });
+        }
+        updateFrozenCells();
     }
     init();
 </script>

@@ -2262,13 +2262,13 @@ if __name__ == "__main__":
     init_db()
     print("=" * 50)
     print("  客服排班系统后端已启动")
-    print("  打开浏览器访问: http://127.0.0.1:5001")
+    print("  打开浏览器访问: http://127.0.0.1:5000")
     print("=" * 50)
     try:
         from waitress import serve
         print("  使用 waitress 生产服务器")
-        serve(app, host="0.0.0.0", port=5001, threads=4)
+        serve(app, host="0.0.0.0", port=5000, threads=4)
     except ImportError:
         print("  waitress 未安装，使用开发服务器")
         print("  建议执行: pip install waitress")
-        app.run(host="0.0.0.0", port=5001, debug=False, threaded=True)
+        app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

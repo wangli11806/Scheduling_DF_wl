@@ -12,7 +12,6 @@ python app.py
 # 3. 打开浏览器
 # http://127.0.0.1:5000
 ```
-公司 IP 地址：http://10.55.43.44:5000
 
 首次启动自动创建 `schedule.db` 并写入默认员工和班次数据。
 
@@ -41,6 +40,8 @@ python app.py
 ├── schedule.db             # SQLite 数据库（自动生成）
 ├── send_daily_notice.py    # 排班通知脚本（由计划任务定时调用）
 ├── notify_config.json      # 通知配置文件（webhook token + 任务列表）
+├── shared.css              # 公共样式（侧边栏、按钮、弹窗、多选下拉等）
+├── shared.js               # 公共脚本（API 封装、多选组件、工具函数）
 ├── 总览.html               # 总览看板（统计指标、月历跳转）
 ├── 排班表.html             # 排班表（日/周/月视图、导入导出、加班标记）
 ├── 原始排班.html           # 原始排班表（独立管理、同步到排班表）
