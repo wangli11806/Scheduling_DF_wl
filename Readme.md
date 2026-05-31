@@ -37,6 +37,7 @@ python app.py
 ├── run_server.py           # 生产模式启动脚本
 ├── requirements.txt        # Python 依赖
 ├── import_feb_schedule.py  # 排班导入工具脚本
+├── schedule.service        # Linux systemd 服务配置（开机自启）
 ├── schedule.db             # SQLite 数据库（自动生成）
 ├── send_daily_notice.py    # 排班通知脚本（由计划任务定时调用）
 ├── notify_config.json      # 通知配置文件（webhook token + 任务列表）
@@ -315,11 +316,41 @@ python send_daily_notice.py --check-and-send        # 定时调度入口
 
 ## 部署
 
-### 方案 A：单机运行
+### 推荐：阿里云 ECS（Linux）
+
+**最低配置：** 1 vCPU / 1 GiB / 40 GB 系统盘 / 1 Mbps 带宽（个人版免费试用 3 个月即可跑）
 
 ```bash
-python app.py
-# 访问 http://<服务器IP>:5000
+# 1. 创建实例（Ubuntu 22.04），开放安全组 TCP 5000 端口
+# 2. 上传项目到服务器
+scp -r ./* root@<公网IP>:/opt/schedule/
+
+# 3. 安装依赖
+ssh root@<公网IP>
+apt update && apt install python3-pip -y
+cd /opt/schedule && pip install -r requirements.txt gunicorn
+
+# 4. 安装 systemd 服务（开机自启）
+cp schedule.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now schedule
+
+# 5. 访问 http://<公网IP>:5000
+```
+
+**常用管理命令：**
+
+```bash
+systemctl status schedule      # 查看状态
+systemctl restart schedule     # 重启应用
+journalctl -u schedule -f      # 查看实时日志
+```
+
+**SQLite 数据库备份：**
+
+```bash
+# 建议加入 crontab 定时备份
+cp /opt/schedule/schedule.db /opt/schedule/backup/schedule_$(date +%Y%m%d).db
 ```
 
 ### 方案 B：Docker
@@ -334,7 +365,7 @@ EXPOSE 5000
 CMD ["python", "app.py"]
 ```
 
-### 方案 C：Windows 服务
+### 方案 C：Windows 服务（本地运行）
 
 将 `run_server.py` 注册为 Windows 服务（如通过 NSSM），可实现开机自启和后台运行。
 
@@ -343,8 +374,10 @@ CMD ["python", "app.py"]
 ## 注意事项
 
 - SQLite 适合小团队，高并发建议切换 MySQL/PostgreSQL
-- `schedule.db` 需定期备份
-- 无登录鉴权，内网部署建议搭配 nginx basic auth 或 VPN
+- `schedule.db` 需定期备份（云服务器建议设置 crontab 自动备份）
+- 无登录鉴权，公网部署建议限制安全组来源 IP 或搭配 nginx basic auth
+- 部署到新服务器后，`notify_config.json` 和 `schedule.db` 需从旧环境迁移
+- 通知定时任务在 Linux 上通过 crontab 管理（非 Windows 计划任务），在通知设置页面保存后需确认 cron 配置生效
 - 班次颜色：A班(蓝)、B班(青)、C班(紫)、D班(靛)、E班(黄)、T班/F班(自定义)、休息/放休(灰)、请假(橙)
 - 团队颜色：在线组(绿)、热线组(蓝)、售后组(橙)、综合组(紫)、VIP组(粉)、质检组(黄)、支持组(青)
 - 换班/换休标记：排班表中橙色「换班」或蓝紫色「换休」标签，hover 显示交换信息
