@@ -338,6 +338,15 @@ systemctl enable --now schedule
 # 5. 访问 http://<公网IP>:5000
 ```
 
+**日常更新部署（已配置 Git 仓库）：**
+
+```bash
+cd /opt/schedule && git pull origin main
+# 如有新增 Python 依赖，执行：
+pip install -r requirements.txt
+systemctl restart schedule
+```
+
 **常用管理命令：**
 
 ```bash
@@ -345,6 +354,8 @@ systemctl status schedule      # 查看状态
 systemctl restart schedule     # 重启应用
 journalctl -u schedule -f      # 查看实时日志
 ```
+
+> **从 Windows Git Bash 远程部署**：该环境没有 sshpass/expect/setsid，需通过 `SSH_ASKPASS` + Python `subprocess` 方式连接 ECS。关键参数：`PubkeyAuthentication=no`、`SSH_ASKPASS_REQUIRE=force`、`start_new_session=True`、输出用 `decode('utf-8')` 避免 GBK 乱码。
 
 **SQLite 数据库备份：**
 
