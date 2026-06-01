@@ -53,6 +53,7 @@ python app.py
 ├── 班次设置.html           # 班次设置（CRUD）
 ├── 通知设置.html           # 通知设置（钉钉机器人 + 定时任务）
 ├── 月度时长统计.html       # 月度时长统计（排班时长 vs 工时制度、差额分析）
+├── 工作安排统计.html       # 工作安排统计（自然月汇总各员工被安排工作次数）
 └── README.md               # 本文件
 ```
 
@@ -239,6 +240,15 @@ GET    /api/monthly-hours-stats/export                               Excel 导�
 ```
 
 根据排班数据统计每位员工的月度排班时长，与工时制度时长对比计算差额。支持按工时制度和团队筛选。
+
+### 工作安排统计
+
+```
+GET    /api/assignment-stats?year=&month=&team=  统计查询（默认售后组，支持逗号分隔多团队）
+GET    /api/assignment-stats/export               Excel 导出
+```
+
+按自然月从 `daily_assignments` 表汇总员工被安排做各项工作的次数。统计维度：反向工单、自主售后、售后单、紧急、本地生活。
 
 ### 数据库管理
 
