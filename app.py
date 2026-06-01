@@ -1654,6 +1654,155 @@ def _parse_date(val):
     return ""
 
 
+# ==================== 工作安排统计 API ====================
+
+ASSIGNMENT_WORK_TYPES = ["反向工单", "自主售后", "售后单", "紧急", "本地生活"]
+
+
+@app.route("/api/assignment-stats", methods=["GET"])
+def api_assignment_stats():
+    """按自然月统计工作安排，按团队过滤"""
+    year = request.args.get("year", "")
+    month = request.args.get("month", "")
+    team_str = request.args.get("team", "售后组").strip()
+
+    now = datetime.now()
+    if not year:
+        year = str(now.year)
+    if not month:
+        month = str(now.month)
+
+    year_int = int(year)
+    month_int = int(month)
+    last_day = calendar.monthrange(year_int, month_int)[1]
+    start_date = f"{year_int}-{month_int:02d}-01"
+    end_date = f"{year_int}-{month_int:02d}-{last_day}"
+
+    db = get_db()
+
+    # 支持逗号分隔多团队
+    teams = [t.strip() for t in team_str.split(",") if t.strip()]
+
+    # 获取指定团队的员工
+    if teams:
+        placeholders = ",".join("?" for _ in teams)
+        employees = db.execute(
+            f"SELECT name FROM employees WHERE team IN ({placeholders}) AND status='active' ORDER BY name",
+            teams
+        ).fetchall()
+    else:
+        employees = db.execute(
+            "SELECT name FROM employees WHERE status='active' ORDER BY name"
+        ).fetchall()
+    emp_names = {e["name"] for e in employees}
+
+    # 查询当月所有工作安排
+    rows = db.execute(
+        "SELECT employee_name, work_types FROM daily_assignments WHERE date>=? AND date<=? ORDER BY date",
+        (start_date, end_date)
+    ).fetchall()
+
+    # 统计：员工 -> 工作类型 -> 次数
+    stats = {}
+    for e in employees:
+        stats[e["name"]] = {w: 0 for w in ASSIGNMENT_WORK_TYPES}
+
+    for r in rows:
+        emp = r["employee_name"]
+        if emp not in emp_names:
+            continue
+        work_types = json.loads(r["work_types"])
+        for w in work_types:
+            if w in stats[emp]:
+                stats[emp][w] += 1
+
+    results = []
+    for e in employees:
+        entry = {"name": e["name"]}
+        entry.update(stats[e["name"]])
+        results.append(entry)
+
+    # 所有可选团队
+    all_teams = db.execute("SELECT DISTINCT team FROM employees WHERE status='active' ORDER BY team").fetchall()
+    team_list = [r["team"] for r in all_teams]
+
+    return jsonify({"rows": results, "teams": team_list, "month": f"{year_int}年{month_int}月"})
+
+
+@app.route("/api/assignment-stats/export", methods=["GET"])
+def api_assignment_stats_export():
+    """导出工作安排统计Excel"""
+    year = request.args.get("year", "")
+    month = request.args.get("month", "")
+    team_str = request.args.get("team", "售后组").strip()
+
+    now = datetime.now()
+    if not year:
+        year = str(now.year)
+    if not month:
+        month = str(now.month)
+
+    year_int = int(year)
+    month_int = int(month)
+    last_day = calendar.monthrange(year_int, month_int)[1]
+    start_date = f"{year_int}-{month_int:02d}-01"
+    end_date = f"{year_int}-{month_int:02d}-{last_day}"
+
+    db = get_db()
+
+    teams = [t.strip() for t in team_str.split(",") if t.strip()]
+    if teams:
+        placeholders = ",".join("?" for _ in teams)
+        employees = db.execute(
+            f"SELECT name FROM employees WHERE team IN ({placeholders}) AND status='active' ORDER BY name",
+            teams
+        ).fetchall()
+    else:
+        employees = db.execute(
+            "SELECT name FROM employees WHERE status='active' ORDER BY name"
+        ).fetchall()
+    emp_names = {e["name"] for e in employees}
+
+    rows = db.execute(
+        "SELECT employee_name, work_types FROM daily_assignments WHERE date>=? AND date<=? ORDER BY date",
+        (start_date, end_date)
+    ).fetchall()
+
+    stats = {}
+    for e in employees:
+        stats[e["name"]] = {w: 0 for w in ASSIGNMENT_WORK_TYPES}
+
+    for r in rows:
+        emp = r["employee_name"]
+        if emp not in emp_names:
+            continue
+        work_types = json.loads(r["work_types"])
+        for w in work_types:
+            if w in stats[emp]:
+                stats[emp][w] += 1
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{year_int}年{month_int}月工作安排统计"
+    ws.append(["员工姓名"] + ASSIGNMENT_WORK_TYPES)
+
+    for e in employees:
+        row = [e["name"]] + [stats[e["name"]][w] for w in ASSIGNMENT_WORK_TYPES]
+        ws.append(row)
+
+    ws.column_dimensions["A"].width = 12
+    for i in range(len(ASSIGNMENT_WORK_TYPES)):
+        ws.column_dimensions[get_column_letter(i + 2)].width = 14
+
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    wb.save(tmp.name)
+    tmp.close()
+    return send_file(tmp.name, as_attachment=True,
+                     download_name=f"工作安排统计_{year_int}年{month_int}月.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 # ==================== 月度时长统计 API ====================
 
 @app.route("/api/monthly-hours-stats", methods=["GET"])

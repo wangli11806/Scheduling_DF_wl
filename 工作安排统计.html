@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>客服排班系统 - 月度时长统计</title>
+    <title>客服排班系统 - 工作安排统计</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
@@ -51,7 +51,7 @@
             border-bottom: 1px solid #e8ecf1;
         }
         .header-bar h1 { font-size: 1.15rem; font-weight: 700; color: #1e293b; margin: 0; }
-        .content-body { flex: 1; padding: 20px 28px; }
+        .content-body { flex: 1; padding: 20px 28px; overflow-y: auto; }
 
         .filter-bar {
             display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
@@ -73,17 +73,6 @@
             transition: all 0.15s;
         }
         .month-btn:hover { background: #f1f5f9; color: #1e293b; border-color: #cbd5e1; }
-
-        .radio-group {
-            display: inline-flex; gap: 2px; background: #eef2ff; border-radius: 60px; padding: 3px;
-        }
-        .radio-opt {
-            display: inline-flex; align-items: center; padding: 5px 14px;
-            border-radius: 40px; font-size: 0.88rem; font-weight: 500; color: #64748b;
-            cursor: pointer; transition: all 0.15s; user-select: none;
-        }
-        .radio-opt:has(input:checked) { background: white; color: #1e3a5f; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-        .radio-opt input { display: none; }
 
         .multi-select { position: relative; user-select: none; }
         .multi-select-trigger {
@@ -122,7 +111,7 @@
         .btn-primary:hover { background: #1e2f4a; }
 
         .table-wrapper {
-            background: white;
+            background: white; border-radius: 12px; overflow: hidden;
             box-shadow: 0 1px 4px rgba(0,0,0,0.03); border: 1px solid #e8ecf1;
         }
         table {
@@ -132,59 +121,18 @@
             padding: 10px 14px; text-align: center; vertical-align: middle;
             border: 1px solid #ecf3fa;
         }
-        /* 表头吸顶 */
         table thead th {
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            background: #f9fbfd;
-            padding: 12px 14px;
+            position: sticky; top: 0; z-index: 10;
+            background: #f9fbfd; padding: 12px 14px;
             font-weight: 700; color: #2c3e66; font-size: 0.85rem;
         }
         table tbody tr:hover td { background: #eef2ff; }
-        .col-team { width: 80px; }
-        .col-id { width: 100px; }
-        .col-name { width: 100px; }
-        .col-scheduled { width: 130px; }
-        .col-system { width: 130px; }
-        .col-diff { width: 100px; }
 
-        .team-bg-在线组 { background: #e8f5e9; }
-        .team-bg-热线组 { background: #e3f2fd; }
-        .team-bg-售后组 { background: #fff3e0; }
-        .team-bg-综合组 { background: #f3e5f5; }
-        .team-bg-VIP组 { background: #fce4ec; }
-        .team-bg-质检组 { background: #fff8e1; }
-        .team-bg-支持组 { background: #e0f2f1; }
+        .col-name { width: 120px; }
+        .col-work { width: 100px; }
 
-        .diff-positive { color: #10b981; font-weight: 700; }
-        .diff-negative { color: #ef4444; font-weight: 700; }
-        .diff-zero { color: #64748b; }
-
-        .info-icon {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 15px; height: 15px; border-radius: 50%;
-            background: #cbd5e1; color: white; font-size: 10px; font-weight: 700;
-            cursor: help; margin-left: 4px; position: relative; top: -1px;
-            font-style: italic; font-family: 'Times New Roman', serif;
-        }
-        .info-icon:hover { background: #6366f1; }
-        #globalTip {
-            visibility: hidden; opacity: 0;
-            position: fixed;
-            background: #1e293b; color: #f1f5f9; padding: 8px 12px; border-radius: 8px;
-            font-size: 0.82rem; font-weight: 400; font-style: normal;
-            white-space: normal; max-width: 280px;
-            z-index: 9999; pointer-events: none;
-            transition: opacity 0.12s, visibility 0.12s;
-        }
-        #globalTip.show { visibility: visible; opacity: 1; }
-        #globalTip::after {
-            content: ''; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
-            border: 5px solid transparent; border-bottom-color: #1e293b;
-        }
-        #globalTip.right::after { left: auto; right: 16px; }
-        th .info-icon { vertical-align: middle; }
+        .count-cell { font-weight: 600; font-size: 1rem; }
+        .count-zero { color: #cbd5e1; }
 
         .toast-msg {
             position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -225,8 +173,8 @@
         <div class="nav-group open">
             <div class="nav-item nav-group-toggle" data-page="stats">排班统计</div>
             <div class="nav-submenu">
-                <a class="nav-item nav-sub-item active" data-page="monthly-hours" href="月度时长统计.html">月度时长统计</a>
-                <a class="nav-item nav-sub-item" data-page="assignment-stats" href="工作安排统计.html">工作安排统计</a>
+                <a class="nav-item nav-sub-item" data-page="monthly-hours" href="月度时长统计.html">月度时长统计</a>
+                <a class="nav-item nav-sub-item active" data-page="assignment-stats" href="工作安排统计.html">工作安排统计</a>
             </div>
         </div>
     </nav>
@@ -234,7 +182,7 @@
 
 <div class="main-area">
     <div class="header-bar">
-        <h1>月度时长统计</h1>
+        <h1>工作安排统计</h1>
         <button class="btn btn-primary" id="exportBtn" style="padding:7px 20px;">导出Excel</button>
     </div>
     <div class="content-body">
@@ -248,18 +196,10 @@
                 </div>
             </div>
             <div class="filter-field">
-                <label>工时制度</label>
-                <div class="radio-group" id="workSystemFilter">
-                    <label class="radio-opt"><input type="radio" name="workSystem" value="" checked> 全部</label>
-                    <label class="radio-opt"><input type="radio" name="workSystem" value="标准工时制"> 标准工时制</label>
-                    <label class="radio-opt"><input type="radio" name="workSystem" value="综合计算工时制"> 综合计算工时制</label>
-                </div>
-            </div>
-            <div class="filter-field">
                 <label>所属团队</label>
                 <div class="multi-select" id="filterTeam">
                     <div class="multi-select-trigger" id="filterTeamTrigger">
-                        <span class="ms-placeholder">全部团队</span>
+                        <span class="ms-placeholder">售后组</span>
                     </div>
                     <div class="ms-dropdown">
                         <div class="ms-header">
@@ -278,12 +218,12 @@
             <table>
                 <thead>
                     <tr>
-                        <th class="col-team">所属团队</th>
-                        <th class="col-id">东福工号</th>
                         <th class="col-name">员工姓名</th>
-                        <th class="col-scheduled">原始排班时长(h)<span class="info-icon" data-tip="依据月初原始排班中各班次的天数，累加计算员工当月应工作小时数">i</span></th>
-                        <th class="col-system">工时制度时长(h)<span class="info-icon" data-tip="对于标准工时制员工，工时制度时长=当月法定工作日数 × 8h&#10;对于综合计算工时制员工，工时制度时长=167h（法定固定时长）">i</span></th>
-                        <th class="col-diff">差额(h)<span class="info-icon" data-tip="工时差额 = 原始排班时长 - 工时制度时长">i</span></th>
+                        <th class="col-work">反向工单</th>
+                        <th class="col-work">自主售后</th>
+                        <th class="col-work">售后单</th>
+                        <th class="col-work">紧急</th>
+                        <th class="col-work">本地生活</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -296,6 +236,7 @@
 
 <script>
 const API_BASE = '/api';
+const WORK_TYPES = ["反向工单", "自主售后", "售后单", "紧急", "本地生活"];
 
 async function apiGet(url) {
     const res = await fetch(API_BASE + url);
@@ -310,7 +251,6 @@ function showToast(msg) {
 }
 
 let currentYear, currentMonth;
-let filterWorkSystem = '';
 let filterTeams = [];
 let teamOptions = [];
 
@@ -318,17 +258,12 @@ function formatMonthLabel(y, m) {
     return y + '年' + m + '月';
 }
 
-function renderDiff(val) {
-    if (val > 0) return `<span class="diff-positive">+${val}</span>`;
-    if (val < 0) return `<span class="diff-negative">${val}</span>`;
-    return `<span class="diff-zero">0</span>`;
-}
-
 function buildApiUrl() {
-    let url = `/monthly-hours-stats?year=${currentYear}&month=${currentMonth}`;
-    if (filterWorkSystem) url += `&work_system=${encodeURIComponent(filterWorkSystem)}`;
+    let url = `/assignment-stats?year=${currentYear}&month=${currentMonth}`;
     if (filterTeams.length > 0 && filterTeams.length < teamOptions.length) {
-        url += `&teams=${encodeURIComponent(filterTeams.join(','))}`;
+        url += `&team=${encodeURIComponent(filterTeams.join(','))}`;
+    } else if (filterTeams.length === 1) {
+        url += `&team=${encodeURIComponent(filterTeams[0])}`;
     }
     return url;
 }
@@ -344,22 +279,14 @@ async function loadData() {
             return;
         }
 
-        // 按团队优先排序
-        const TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
-        data.sort((a, b) => {
-            const ta = TEAM_ORDER.indexOf(a.team), tb = TEAM_ORDER.indexOf(b.team);
-            if (ta !== tb) return (ta === -1 ? 999 : ta) - (tb === -1 ? 999 : tb);
-            return a.name.localeCompare(b.name, 'zh');
-        });
-
         tbody.innerHTML = data.map(row => `
             <tr>
-                <td class="team-bg-${escapeHtml(row.team)}" style="font-size:0.82rem;color:#475569;font-weight:600;">${escapeHtml(row.team)}</td>
-                <td>${escapeHtml(row.dongfu_id)}</td>
                 <td style="font-weight:600;">${escapeHtml(row.name)}</td>
-                <td>${row.scheduled_hours}</td>
-                <td>${row.system_hours}</td>
-                <td>${renderDiff(row.diff)}</td>
+                ${WORK_TYPES.map(w => {
+                    const cnt = row[w] || 0;
+                    const cls = cnt === 0 ? 'count-zero' : '';
+                    return `<td class="count-cell ${cls}">${cnt}</td>`;
+                }).join('')}
             </tr>
         `).join('');
     } catch(e) {
@@ -464,21 +391,26 @@ async function init() {
 
     document.getElementById("monthLabel").textContent = formatMonthLabel(currentYear, currentMonth);
 
-    // 先获取团队列表
+    // 获取团队列表，默认选中售后组
     try {
-        const resp = await apiGet(`/monthly-hours-stats?year=${currentYear}&month=${currentMonth}`);
+        const resp = await apiGet(`/assignment-stats?year=${currentYear}&month=${currentMonth}`);
         teamOptions = resp.teams || [];
-        filterTeams = [...teamOptions];
+        // 默认选中售后组
+        if (teamOptions.includes('售后组')) {
+            filterTeams = ['售后组'];
+        } else {
+            filterTeams = [...teamOptions];
+        }
     } catch(e) {
         showToast('加载团队列表失败: ' + e.message);
+        filterTeams = ['售后组'];
     }
 
-    // 初始化团队多选
     initMultiSelect({
         containerId: 'filterTeam', triggerId: 'filterTeamTrigger',
         selectAllId: 'filterTeamAll', optionsId: 'filterTeamOptions',
         clearId: 'filterTeamClear', okId: 'filterTeamOk',
-        placeholder: '全部团队',
+        placeholder: '售后组',
         getOptions: () => teamOptions,
         getSelected: () => filterTeams,
         setSelected: (v) => { filterTeams = v; },
@@ -501,16 +433,13 @@ async function init() {
 
     // 导出按钮
     document.getElementById("exportBtn").addEventListener("click", () => {
-        const url = API_BASE + buildApiUrl().replace('/monthly-hours-stats?', '/monthly-hours-stats/export?');
+        let url = API_BASE + `/assignment-stats/export?year=${currentYear}&month=${currentMonth}`;
+        if (filterTeams.length === 1) {
+            url += `&team=${encodeURIComponent(filterTeams[0])}`;
+        } else if (filterTeams.length > 1) {
+            url += `&team=${encodeURIComponent(filterTeams.join(','))}`;
+        }
         window.open(url, '_blank');
-    });
-
-    // 工时制度单选
-    document.querySelectorAll('input[name="workSystem"]').forEach(radio => {
-        radio.addEventListener('change', () => {
-            filterWorkSystem = document.querySelector('input[name="workSystem"]:checked').value;
-            loadData();
-        });
     });
 
     // 侧边栏导航
@@ -546,68 +475,6 @@ async function init() {
     loadData();
 }
 init();
-
-// 全局气泡提示
-(function(){
-    const tip = document.createElement('div');
-    tip.id = 'globalTip';
-    document.body.appendChild(tip);
-
-    let currentIcon = null;
-
-    function showTip(icon) {
-        currentIcon = icon;
-        const text = icon.getAttribute('data-tip');
-        if (!text) return;
-        tip.innerHTML = text.replace(/\n/g, '<br>');
-        tip.classList.add('show');
-    }
-
-    function hideTip() {
-        currentIcon = null;
-        tip.classList.remove('show', 'right');
-    }
-
-    function positionTip() {
-        if (!currentIcon) return;
-        const rect = currentIcon.getBoundingClientRect();
-        const tipW = tip.offsetWidth || 280;
-        const iconCenter = rect.left + rect.width / 2;
-
-        // 靠右时气泡左移
-        const overflowRight = iconCenter + tipW / 2 - window.innerWidth + 10;
-        if (overflowRight > 0) {
-            tip.classList.add('right');
-            tip.style.left = (iconCenter - tipW + rect.width / 2 + 20) + 'px';
-        } else {
-            tip.classList.remove('right');
-            tip.style.left = (iconCenter - tipW / 2) + 'px';
-        }
-        tip.style.top = (rect.bottom + 6) + 'px';
-    }
-
-    document.addEventListener('mouseover', function(e) {
-        const icon = e.target.closest('.info-icon');
-        if (icon && icon !== currentIcon) {
-            showTip(icon);
-            requestAnimationFrame(positionTip);
-        } else if (!icon && currentIcon) {
-            hideTip();
-        }
-    });
-
-    document.addEventListener('mouseout', function(e) {
-        const icon = e.target.closest('.info-icon');
-        if (!icon && currentIcon) {
-            hideTip();
-        }
-    });
-
-    // 滚动时更新位置
-    window.addEventListener('scroll', function() {
-        if (currentIcon) requestAnimationFrame(positionTip);
-    }, {passive: true});
-})();
 </script>
 </body>
 </html>
