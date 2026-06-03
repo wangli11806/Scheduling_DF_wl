@@ -4,3 +4,4 @@ __pycache__/
 service_error*.log
 service_output*.log
 logs/
+.claude/scheduled_tasks.lock

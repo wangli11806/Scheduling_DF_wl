@@ -404,4 +404,4 @@ CMD ["python", "app.py"]
 - 团队颜色：在线组(绿)、热线组(蓝)、售后组(橙)、综合组(紫)、VIP组(粉)、质检组(黄)、支持组(青)
 - 换班/换休标记：排班表中橙色「换班」或蓝紫色「换休」标签，hover 显示交换信息
 - 加班标记：排班表中红色「加班」标签，hover 显示时长和时间段，点击跳转加班换班并自动筛选该员工
-- **表头吸顶**：sticky 必须加在 `th` 元素上（`table thead th { position: sticky; top: 0; }`），不能加在 `thead` 上。加在 `thead` 上会因 `border-collapse: collapse` 导致吸顶时背景透出下层内容（已踩坑验证5次）。页面滚动容器应保持自然滚动（body 用 `min-height: 100vh`，content-body 不设 `overflow`）。参考：`员工管理.html` 和 `月度时长统计.html`。
+- **表头吸顶**：sticky 必须加在 `th` 而非 `thead` 上，否则 `border-collapse: collapse` 会导致透底。详见 `.claude/rules/sticky-header.md`
