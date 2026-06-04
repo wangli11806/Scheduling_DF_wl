@@ -7,7 +7,7 @@ Flask + SQLite，单文件部署
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(sys.executable), 'Lib', 'site-packages'))
 
-import sqlite3, json, hashlib
+import sqlite3, json, hashlib, hmac
 from datetime import datetime, date
 from flask import Flask, request, jsonify, g, send_file, session, redirect
 from openpyxl import Workbook
@@ -48,7 +48,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 def check_password(password):
     cfg = load_auth_config()
     dk = hashlib.pbkdf2_hmac("sha256", password.encode(), cfg["salt"].encode(), 200000)
-    return dk.hex() == cfg["password_hash"]
+    return hmac.compare_digest(dk.hex(), cfg["password_hash"])
 
 
 @app.before_request
@@ -58,7 +58,7 @@ def require_auth():
     if not session.get("logged_in"):
         if request.path.startswith("/api/"):
             return jsonify({"ok": False, "error": "未登录"}), 401
-        return redirect("/login?next=" + request.path)
+        return redirect("/login?next=" + request.full_path.lstrip("/"))
 
 
 # ==================== 鉴权路由 ====================
@@ -78,6 +78,7 @@ def api_auth_login():
         return jsonify({"ok": False, "error": "请输入密码"})
     if not check_password(password):
         return jsonify({"ok": False, "error": "密码错误"})
+    session.clear()
     session["logged_in"] = True
     return jsonify({"ok": True})
 

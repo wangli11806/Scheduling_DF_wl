@@ -6,15 +6,18 @@
 # 1. 安装依赖
 pip install -r requirements.txt
 
-# 2. 启动后端（数据库自动创建并初始化）
+# 2. 首次部署需设置登录密码（已设置过可跳过）
+python setup_password.py
+
+# 3. 启动后端（数据库自动创建并初始化）
 python app.py
 
-# 3. 打开浏览器
+# 4. 打开浏览器访问登录页
 # 本地：http://127.0.0.1:5000
 # 云服务器：http://115.29.235.170:5000
 ```
 
-首次启动自动创建 `schedule.db` 并写入默认员工和班次数据。
+默认密码 `paiban2026`，可通过 `python setup_password.py` 修改。密码哈希存储在 `auth_config.json`（不入 git）。
 
 ---
 
@@ -34,27 +37,28 @@ python app.py
 
 ```
 排班系统/
-├── app.py                  # Flask 后端（所有 API + 数据库初始化）
-├── run_server.py           # 生产模式启动脚本
+├── app.py                  # Flask 后端（API + 数据库 + 鉴权）
+├── login.html              # 登录页
+├── setup_password.py       # 密码设置工具
 ├── requirements.txt        # Python 依赖
-├── import_feb_schedule.py  # 排班导入工具脚本
-├── schedule.service        # Linux systemd 服务配置（开机自启）
-├── schedule.db             # SQLite 数据库（自动生成）
-├── send_daily_notice.py    # 排班通知脚本（由计划任务定时调用）
-├── notify_config.json      # 通知配置文件（webhook token + 任务列表）
-├── shared.css              # 公共样式（侧边栏、按钮、弹窗、多选下拉等）
-├── shared.js               # 公共脚本（API 封装、多选组件、工具函数）
-├── 总览.html               # 总览看板（统计指标、月历跳转）
-├── 排班表.html             # 排班表（日/周/月视图、导入导出、加班标记）
-├── 原始排班.html           # 原始排班表（独立管理、同步到排班表）
-├── 工作安排.html           # 工作安排（每日工作类型分配、用餐安排）
-├── 加班换班.html           # 加班换班（加班记录、换班/换休申请与记录）
-├── 员工管理.html           # 员工管理（CRUD + Excel 批量导入）
-├── 班次设置.html           # 班次设置（CRUD）
-├── 通知设置.html           # 通知设置（钉钉机器人 + 定时任务）
-├── 月度时长统计.html       # 月度时长统计（排班时长 vs 工时制度、差额分析）
-├── 工作安排统计.html       # 工作安排统计（自然月汇总各员工被安排工作次数）
-└── README.md               # 本文件
+├── run_server.py           # 生产模式启动脚本
+├── schedule.service        # Linux systemd 服务配置
+├── schedule.db             # SQLite 数据库（自动生成，不入 git）
+├── send_daily_notice.py    # 排班通知脚本
+├── notify_config.json      # 钉钉通知配置
+├── shared.css              # 公共样式（侧边栏、按钮、弹窗、表格等）
+├── shared.js               # 公共脚本（API 封装、多选组件）
+├── 总览.html               # 总览看板
+├── 排班表.html             # 排班表（日/周/月视图）
+├── 原始排班.html           # 原始排班表
+├── 工作安排.html           # 工作安排
+├── 加班换班.html           # 加班换班
+├── 员工管理.html           # 员工管理（CRUD + 导入）
+├── 班次设置.html           # 班次设置
+├── 通知设置.html           # 钉钉通知设置
+├── 月度时长统计.html       # 排班时长统计
+├── 工作安排统计.html       # 工作安排统计
+└── Readme.md               # 本文件
 ```
 
 ---
@@ -366,8 +370,6 @@ systemctl restart schedule     # 重启应用
 journalctl -u schedule -f      # 查看实时日志
 ```
 
-> **从 Windows Git Bash 远程部署**：该环境没有 sshpass/expect/setsid，需通过 `SSH_ASKPASS` + Python `subprocess` 方式连接 ECS。关键参数：`PubkeyAuthentication=no`、`SSH_ASKPASS_REQUIRE=force`、`start_new_session=True`、输出用 `decode('utf-8')` 避免 GBK 乱码。
-
 **SQLite 数据库备份：**
 
 ```bash
@@ -395,13 +397,8 @@ CMD ["python", "app.py"]
 
 ## 注意事项
 
+- **登录鉴权**：已启用密码登录，默认密码 `paiban2026`，通过 `python setup_password.py` 修改
+- **auth_config.json**：不入 git，首次部署或迁移服务器后需运行 `python setup_password.py`
+- **数据库备份**：`schedule.db` 需定期备份，建议 crontab 定时执行 `cp schedule.db backup/schedule_$(date +%Y%m%d).db`
+- **文件迁移**：部署到新服务器后，`notify_config.json` 和 `schedule.db` 需从旧环境手动迁移
 - SQLite 适合小团队，高并发建议切换 MySQL/PostgreSQL
-- `schedule.db` 需定期备份（云服务器建议设置 crontab 自动备份）
-- 无登录鉴权，公网部署建议限制安全组来源 IP 或搭配 nginx basic auth
-- 部署到新服务器后，`notify_config.json` 和 `schedule.db` 需从旧环境迁移
-- 通知定时任务在 Linux 上通过 crontab 管理（非 Windows 计划任务），在通知设置页面保存后需确认 cron 配置生效
-- 班次颜色：A班(蓝)、B班(青)、C班(紫)、D班(靛)、E班(黄)、T班/F班(自定义)、休息/放休(灰)、请假(橙)
-- 团队颜色：在线组(绿)、热线组(蓝)、售后组(橙)、综合组(紫)、VIP组(粉)、质检组(黄)、支持组(青)
-- 换班/换休标记：排班表中橙色「换班」或蓝紫色「换休」标签，hover 显示交换信息
-- 加班标记：排班表中红色「加班」标签，hover 显示时长和时间段，点击跳转加班换班并自动筛选该员工
-- **表头吸顶**：sticky 必须加在 `th` 而非 `thead` 上，否则 `border-collapse: collapse` 会导致透底。详见 `.claude/rules/sticky-header.md`
