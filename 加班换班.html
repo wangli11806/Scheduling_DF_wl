@@ -447,7 +447,11 @@
     }
 
     function getSupervisors() {
-        return employees.filter(e => e.position === '主管' && e.status === 'active');
+        const supervisors = employees.filter(e => e.position === '主管' && e.status === 'active');
+        if (!supervisors.find(s => s.name === '汪丽')) {
+            supervisors.push({ name: '汪丽', team: '', position: '' });
+        }
+        return supervisors;
     }
 
     function getEmployeesByTeam(team) {

@@ -274,6 +274,38 @@ PUT    /api/notify/task/<id>             编辑定时任务
 DELETE /api/notify/task/<id>             删除定时任务
 ```
 
+### 机器人排班查询（Token 鉴权）
+
+独立于登录 session，适合机器人/定时任务调用。Token 存在 `auth_config.json` 的 `bot_token` 字段。
+
+```
+GET    /api/bot/schedules?token=<TOKEN>&date=YYYY-MM-DD
+GET    /api/bot/schedules?token=<TOKEN>&date=YYYY-MM-DD&employee=张三
+```
+
+参数：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| token | 是 | `auth_config.json` 中的 `bot_token` |
+| date | 是 | 日期 YYYY-MM-DD |
+| employee | 否 | 员工姓名，不填返回当天全部在班人员 |
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "date": "2026-06-05",
+  "count": 50,
+  "schedules": [
+    {"employee": "张三", "team": "在线组", "shift": "A班", "start_time": "09:00", "end_time": "18:00"}
+  ]
+}
+```
+
+仅返回在职员工（`status='active'`），已离职/失效的不会出现。
+
 ---
 
 ## 页面间跳转
