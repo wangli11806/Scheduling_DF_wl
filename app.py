@@ -107,7 +107,7 @@ def api_bot_schedules():
             FROM schedules s
             LEFT JOIN employees e ON e.name = s.employee_name
             LEFT JOIN shifts sh ON sh.name = s.shift_name
-            WHERE s.schedule_date = ? AND s.employee_name = ?
+            WHERE s.schedule_date = ? AND s.employee_name = ? AND e.status = 'active'
         """, [date_str, employee]).fetchall()
     else:
         rows = db.execute("""
@@ -116,7 +116,7 @@ def api_bot_schedules():
             FROM schedules s
             LEFT JOIN employees e ON e.name = s.employee_name
             LEFT JOIN shifts sh ON sh.name = s.shift_name
-            WHERE s.schedule_date = ?
+            WHERE s.schedule_date = ? AND e.status = 'active'
             ORDER BY e.team, s.employee_name
         """, [date_str]).fetchall()
 
