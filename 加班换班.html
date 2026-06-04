@@ -104,6 +104,33 @@
         .swap-table th { background: #f9fbfd; padding: 10px 12px; font-size: 0.92rem; font-weight: 600; color: #2c3e66; text-align: left; border-bottom: 1px solid #e2e8f0; }
         .swap-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
         .swap-table select, .swap-table input[type="date"] { width: 100%; padding: 7px 10px; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 0.92rem; }
+        /* 模糊搜索单选 */
+        .search-select { position: relative; }
+        .ss-input {
+            width: 100%; padding: 7px 10px; border-radius: 10px; border: 1px solid #cbd5e1;
+            font-size: 0.92rem; outline: none; box-sizing: border-box; background: white;
+        }
+        .ss-input:focus { border-color: #6366f1; }
+        .ss-dropdown {
+            display: none; position: fixed; z-index: 999;
+            background: white; border: 1px solid #e2e8f0; border-radius: 0 0 12px 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1); max-height: 240px; overflow-y: auto;
+        }
+        .ss-dropdown.show { display: block; }
+        .ss-option {
+            padding: 9px 12px; cursor: pointer; font-size: 0.92rem; color: #334155;
+            transition: background 0.1s;
+        }
+        .ss-option:hover { background: #eef2ff; color: #3730a3; }
+        .ss-option.active { background: #eef2ff; color: #3730a3; font-weight: 600; }
+        .ss-no-result { padding: 12px; text-align: center; color: #94a3b8; font-size: 0.85rem; }
+        .ss-clear {
+            position: absolute; right: 28px; top: 50%; transform: translateY(-50%);
+            cursor: pointer; color: #94a3b8; font-size: 1rem; line-height: 1; display: none;
+            padding: 0 4px;
+        }
+        .ss-clear:hover { color: #ef4444; }
+        .ss-clear.visible { display: block; }
         .swap-table thead th input[type="date"] { width: 100%; box-sizing: border-box; }
         .swap-table .shift-info { min-width: 120px; font-size: 0.92rem; color: #475569; }
 
@@ -343,13 +370,27 @@
             <tbody>
                 <tr>
                     <td style="font-weight:600;" id="swapLabelA">换休人</td>
-                    <td><select id="swapPersonA"></select></td>
+                    <td>
+                        <div class="search-select" id="ssA">
+                            <input type="text" class="ss-input" id="ssInputA" placeholder="搜索员工..." autocomplete="off">
+                            <span class="ss-clear" id="ssClearA">&times;</span>
+                            <div class="ss-dropdown" id="ssDropdownA"><div class="ss-options" id="ssOptionsA"></div></div>
+                        </div>
+                        <input type="hidden" id="swapPersonA" value="">
+                    </td>
                     <td class="shift-info" id="swapShiftAA">-</td>
                     <td class="shift-info" id="swapShiftAB">-</td>
                 </tr>
                 <tr>
                     <td style="font-weight:600;" id="swapLabelB">交换人</td>
-                    <td><select id="swapPersonB"></select></td>
+                    <td>
+                        <div class="search-select" id="ssB">
+                            <input type="text" class="ss-input" id="ssInputB" placeholder="搜索员工..." autocomplete="off">
+                            <span class="ss-clear" id="ssClearB">&times;</span>
+                            <div class="ss-dropdown" id="ssDropdownB"><div class="ss-options" id="ssOptionsB"></div></div>
+                        </div>
+                        <input type="hidden" id="swapPersonB" value="">
+                    </td>
                     <td class="shift-info" id="swapShiftBA">-</td>
                     <td class="shift-info" id="swapShiftBB">-</td>
                 </tr>
@@ -738,14 +779,93 @@
 
     function renderSwapPersonSelects() {
         const allActive = employees.filter(e => e.status === 'active');
-        const selA = document.getElementById('swapPersonA');
-        const selB = document.getElementById('swapPersonB');
-        const prevA = selA.value;
-        const prevB = selB.value;
-        selA.innerHTML = '<option value="">请选择</option>' +
-            allActive.map(e => `<option value="${e.name}" ${e.name===prevA?'selected':''}>${e.name}</option>`).join('');
-        selB.innerHTML = '<option value="">请选择</option>' +
-            allActive.map(e => `<option value="${e.name}" ${e.name===prevB?'selected':''}>${e.name}</option>`).join('');
+        [['A', 'swapPersonA'], ['B', 'swapPersonB']].forEach(([suffix, hidId]) => {
+            const hid = document.getElementById(hidId);
+            const optionsEl = document.getElementById('ssOptions' + suffix);
+            const inputEl = document.getElementById('ssInput' + suffix);
+            const prevVal = hid.value;
+            inputEl.value = prevVal || '';
+            document.getElementById('ssClear' + suffix).classList.toggle('visible', !!prevVal);
+            const filtered = allActive.filter(e => e.name.includes(inputEl.value));
+            if (filtered.length === 0) {
+                optionsEl.innerHTML = '<div class="ss-no-result">无匹配员工</div>';
+            } else {
+                optionsEl.innerHTML = filtered.map(e =>
+                    `<div class="ss-option${e.name===prevVal?' active':''}" data-value="${e.name}">${e.name}</div>`
+                ).join('');
+            }
+        });
+    }
+
+    function initSearchSelect(suffix, hidId) {
+        const container = document.getElementById('ss' + suffix);
+        const inputEl = document.getElementById('ssInput' + suffix);
+        const dropdown = document.getElementById('ssDropdown' + suffix);
+        const optionsEl = document.getElementById('ssOptions' + suffix);
+        const clearEl = document.getElementById('ssClear' + suffix);
+        const hid = document.getElementById(hidId);
+        const allActive = () => employees.filter(e => e.status === 'active');
+
+        function select(name) {
+            if (hid.value !== name) {
+                hid.value = name;
+                hid.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            inputEl.value = name;
+            dropdown.classList.remove('show');
+            clearEl.classList.toggle('visible', !!name);
+            renderSwapPersonSelects();
+        }
+
+        function positionDropdown() {
+            const rect = inputEl.getBoundingClientRect();
+            dropdown.style.left = rect.left + 'px';
+            dropdown.style.top = rect.bottom + 2 + 'px';
+            dropdown.style.width = rect.width + 'px';
+        }
+
+        inputEl.addEventListener('focus', () => {
+            if (!allActive().length) return;
+            renderSwapPersonSelects();
+            positionDropdown();
+            dropdown.classList.add('show');
+        });
+
+        inputEl.addEventListener('input', () => {
+            renderSwapPersonSelects();
+            positionDropdown();
+            dropdown.classList.add('show');
+        });
+
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { dropdown.classList.remove('show'); inputEl.blur(); return; }
+            const visible = optionsEl.querySelectorAll('.ss-option');
+            let idx = Array.from(visible).findIndex(o => o.classList.contains('active'));
+            if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, visible.length - 1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); }
+            else if (e.key === 'Enter') { e.preventDefault(); if (idx >= 0) select(visible[idx].dataset.value); return; }
+            else return;
+            visible.forEach(o => o.classList.remove('active'));
+            if (visible[idx]) { visible[idx].classList.add('active'); visible[idx].scrollIntoView({ block: 'nearest' }); }
+        });
+
+        optionsEl.addEventListener('click', (e) => {
+            const opt = e.target.closest('.ss-option');
+            if (opt) select(opt.dataset.value);
+        });
+
+        clearEl.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            hid.value = '';
+            inputEl.value = '';
+            clearEl.classList.remove('visible');
+            dropdown.classList.remove('show');
+            hid.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!container.contains(e.target)) dropdown.classList.remove('show');
+        });
     }
 
     function renderShiftCell(cell, result) {
@@ -807,6 +927,10 @@
         document.getElementById('swapSubmitBtn').textContent = L.submit;
         document.getElementById('swapPersonA').value = '';
         document.getElementById('swapPersonB').value = '';
+        document.getElementById('ssInputA').value = '';
+        document.getElementById('ssInputB').value = '';
+        document.getElementById('ssClearA').classList.remove('visible');
+        document.getElementById('ssClearB').classList.remove('visible');
         document.getElementById('swapDateA').value = '';
         document.getElementById('swapDateB').value = '';
         ['swapShiftAA', 'swapShiftAB', 'swapShiftBA', 'swapShiftBB'].forEach(id => {
@@ -955,14 +1079,10 @@
         document.getElementById("swapModal").addEventListener("click", (e) => {
             if (e.target === document.getElementById("swapModal")) closeSwapModal();
         });
-        document.getElementById("swapPersonA").addEventListener("change", () => {
-            renderSwapPersonSelects();
-            refreshAllSwapShifts();
-        });
-        document.getElementById("swapPersonB").addEventListener("change", () => {
-            renderSwapPersonSelects();
-            refreshAllSwapShifts();
-        });
+        initSearchSelect('A', 'swapPersonA');
+        initSearchSelect('B', 'swapPersonB');
+        document.getElementById("swapPersonA").addEventListener("change", () => { refreshAllSwapShifts(); });
+        document.getElementById("swapPersonB").addEventListener("change", () => { refreshAllSwapShifts(); });
         document.getElementById("swapDateA").addEventListener("change", () => refreshAllSwapShifts());
         document.getElementById("swapDateB").addEventListener("change", () => refreshAllSwapShifts());
         document.getElementById("swapRemark").addEventListener("input", function() {
