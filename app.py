@@ -7,9 +7,9 @@ Flask + SQLite，单文件部署
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(sys.executable), 'Lib', 'site-packages'))
 
-import sqlite3, json
+import sqlite3, json, hashlib
 from datetime import datetime, date
-from flask import Flask, request, jsonify, g, send_file
+from flask import Flask, request, jsonify, g, send_file, session, redirect
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 import calendar
@@ -23,6 +23,69 @@ app = Flask(__name__, static_folder=".", static_url_path="")
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # 开发阶段禁用静态文件缓存
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schedule.db")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+# ==================== 鉴权 ====================
+
+AUTH_FILE = os.path.join(BASE_DIR, "auth_config.json")
+AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout"]
+
+
+def load_auth_config():
+    if not os.path.exists(AUTH_FILE):
+        raise RuntimeError(f"auth_config.json 不存在，请先运行: python setup_password.py")
+    with open(AUTH_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+_auth_config = load_auth_config()
+app.secret_key = _auth_config["secret_key"]
+app.config["SESSION_COOKIE_PATH"] = "/"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+
+def check_password(password):
+    cfg = load_auth_config()
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), cfg["salt"].encode(), 200000)
+    return dk.hex() == cfg["password_hash"]
+
+
+@app.before_request
+def require_auth():
+    if request.path in AUTH_EXEMPT:
+        return None
+    if not session.get("logged_in"):
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "未登录"}), 401
+        return redirect("/login?next=" + request.path)
+
+
+# ==================== 鉴权路由 ====================
+
+@app.route("/login")
+def login_page():
+    if session.get("logged_in"):
+        return redirect("/")
+    return app.send_static_file("login.html")
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    data = request.get_json(silent=True) or {}
+    password = data.get("password") or ""
+    if not password:
+        return jsonify({"ok": False, "error": "请输入密码"})
+    if not check_password(password):
+        return jsonify({"ok": False, "error": "密码错误"})
+    session["logged_in"] = True
+    return jsonify({"ok": True})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    session.clear()
+    return jsonify({"ok": True})
 
 
 def count_working_days(year, month):
@@ -51,6 +114,9 @@ class _Tee:
     def flush(self):
         for s in self._streams:
             s.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._streams[0], name)
 
 
 def _rotate_log(path):

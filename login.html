@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>排班系统 - 登录</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #93c5fd 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.login-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 48px 40px;
+    width: 400px;
+    max-width: 92vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+}
+.login-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 8px;
+}
+.login-subtitle {
+    text-align: center;
+    font-size: 14px;
+    color: #94a3b8;
+    margin-bottom: 36px;
+}
+.form-group {
+    margin-bottom: 20px;
+}
+.form-group label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 8px;
+}
+.form-group input {
+    width: 100%;
+    height: 44px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 0 14px;
+    font-size: 15px;
+    color: #1e293b;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.form-group input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+}
+.error-msg {
+    background: #fef2f2;
+    color: #dc2626;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 20px;
+    display: none;
+}
+.error-msg.show { display: block; }
+.login-btn {
+    width: 100%;
+    height: 44px;
+    background: #3b82f6;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.login-btn:hover { background: #5a6fd6; }
+.login-btn:active { background: #4c5fc4; }
+.login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<div class="login-card">
+    <div class="login-title">客服排班系统</div>
+    <div class="login-subtitle">请输入登录密码</div>
+    <div class="error-msg" id="errorMsg"></div>
+    <form id="loginForm">
+        <div class="form-group">
+            <label for="password">密码</label>
+            <input type="password" id="password" autocomplete="current-password" placeholder="请输入密码" required autofocus>
+        </div>
+        <button type="submit" class="login-btn" id="loginBtn">登 录</button>
+    </form>
+</div>
+<script>
+const errorMsg = document.getElementById('errorMsg');
+const loginBtn = document.getElementById('loginBtn');
+const form = document.getElementById('loginForm');
+
+function showError(msg) {
+    errorMsg.textContent = msg;
+    errorMsg.classList.add('show');
+}
+
+function hideError() {
+    errorMsg.classList.remove('show');
+}
+
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideError();
+
+    const password = document.getElementById('password').value.trim();
+
+    if (!password) {
+        showError('请输入密码');
+        return;
+    }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = '登录中...';
+
+    try {
+        const resp = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            // 登录成功，跳转到之前的页面或首页
+            const redirect = new URLSearchParams(window.location.search).get('next') || '/';
+            window.location.href = redirect;
+        } else {
+            showError(data.error || '登录失败');
+        }
+    } catch (err) {
+        showError('网络错误，请稍后重试');
+    } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = '登 录';
+    }
+});
+</script>
+</body>
+</html>
