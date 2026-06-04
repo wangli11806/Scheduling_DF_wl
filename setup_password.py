@@ -48,10 +48,17 @@ def setup():
     if "secret_key" not in config:
         config["secret_key"] = secrets.token_hex(32)
 
+    # 生成机器人访问 token（如果不存在）
+    if "bot_token" not in config:
+        config["bot_token"] = secrets.token_hex(24)
+
     with open(AUTH_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
 
+    bot_token = config.get("bot_token", "")
     print(f"\n密码已设置，配置文件: {AUTH_FILE}")
+    if bot_token:
+        print(f"机器人 Token: {bot_token}")
 
 
 if __name__ == "__main__":

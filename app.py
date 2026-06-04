@@ -28,7 +28,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ==================== 鉴权 ====================
 
 AUTH_FILE = os.path.join(BASE_DIR, "auth_config.json")
-AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout"]
+AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout", "/api/bot/schedules"]
 
 
 def load_auth_config():
@@ -87,6 +87,53 @@ def api_auth_login():
 def api_auth_logout():
     session.clear()
     return jsonify({"ok": True})
+
+
+@app.route("/api/bot/schedules")
+def api_bot_schedules():
+    token = request.args.get("token", "")
+    cfg = load_auth_config()
+    if not token or token != cfg.get("bot_token", ""):
+        return jsonify({"ok": False, "error": "token 无效"}), 403
+
+    date_str = request.args.get("date", "")
+    employee = request.args.get("employee", "").strip()
+
+    db = get_db()
+    if employee:
+        rows = db.execute("""
+            SELECT s.schedule_date, s.employee_name, s.shift_name,
+                   e.team, sh.start_time, sh.end_time
+            FROM schedules s
+            LEFT JOIN employees e ON e.name = s.employee_name
+            LEFT JOIN shifts sh ON sh.name = s.shift_name
+            WHERE s.schedule_date = ? AND s.employee_name = ?
+        """, [date_str, employee]).fetchall()
+    else:
+        rows = db.execute("""
+            SELECT s.schedule_date, s.employee_name, s.shift_name,
+                   e.team, sh.start_time, sh.end_time
+            FROM schedules s
+            LEFT JOIN employees e ON e.name = s.employee_name
+            LEFT JOIN shifts sh ON sh.name = s.shift_name
+            WHERE s.schedule_date = ?
+            ORDER BY e.team, s.employee_name
+        """, [date_str]).fetchall()
+
+    schedules = [{
+        "employee": r["employee_name"],
+        "team": r["team"] or "",
+        "shift": r["shift_name"],
+        "start_time": r["start_time"] or "",
+        "end_time": r["end_time"] or ""
+    } for r in rows]
+
+    return jsonify({
+        "ok": True,
+        "date": date_str,
+        "count": len(schedules),
+        "schedules": schedules
+    })
 
 
 def count_working_days(year, month):
