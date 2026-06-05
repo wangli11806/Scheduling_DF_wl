@@ -171,6 +171,35 @@
         .team-bg-质检组 { background: #fff8e1; }
         .team-bg-支持组 { background: #e0f2f1; }
 
+        /* 用餐时间模块 */
+        .meal-section { margin-top: 24px; }
+        .meal-cols { display: flex; gap: 20px; }
+        .meal-cols .meal-col { flex: 1; min-width: 0; }
+        .meal-card {
+            background: white; border-radius: 16px; padding: 16px 18px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03); border: 1px solid #e8ecf1;
+        }
+        .meal-card-title { font-weight: 700; font-size: 0.95rem; color: #1e293b; margin-bottom: 10px; }
+        .meal-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.78rem; }
+        .meal-table th, .meal-table td {
+            border: 1px solid #ecf3fa; padding: 5px 3px; text-align: center; vertical-align: middle;
+            word-break: break-all; overflow-wrap: break-word;
+        }
+        .meal-table thead th {
+            background: #f9fbfd; font-weight: 700; color: #2c3e66; font-size: 0.72rem; padding: 6px 2px;
+        }
+        .meal-table .col-team { width: 50px; font-weight: 600; font-size: 0.8rem; }
+        .meal-table .col-slot { width: 70px; }
+        .meal-table tbody td { font-size: 0.78rem; color: #334155; line-height: 1.4; }
+        .meal-table tbody tr:hover td { background: #eef2ff; }
+        .meal-table .meal-empty { color: #cbd5e1; }
+        @media (max-width: 860px) {
+            .meal-cols { flex-direction: column; }
+        }
+        .meal-table tbody td { font-size: 0.78rem; color: #334155; line-height: 1.5; }
+        .meal-table tbody tr:hover td { background: #eef2ff; }
+        .meal-table .meal-empty { color: #cbd5e1; }
+
         /* 月日历 + 明日排班 */
         .bottom-section { display: flex; gap: 20px; margin-top: 14px; }
         .bottom-left { flex: 1; }
@@ -192,7 +221,7 @@
         .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; gap: 2px; }
         .cal-day-header { font-size: 0.75rem; color: #94a3b8; font-weight: 600; padding: 4px 0; }
         .cal-day {
-            aspect-ratio: 1; display: flex; flex-direction: column;
+            aspect-ratio: 3/2; display: flex; flex-direction: column;
             align-items: center; justify-content: center; border-radius: 8px;
             cursor: pointer; transition: background 0.15s; font-size: 0.82rem;
             color: #1e293b; position: relative;
@@ -266,6 +295,12 @@
                     <tbody id="assignTableBody"></tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- 用餐时间 -->
+        <div class="meal-section">
+            <div class="section-title">用餐时间</div>
+            <div id="mealSection"></div>
         </div>
 
         <!-- 月排班日历 + 明日排班 -->
@@ -560,6 +595,73 @@ function renderAssignments(scheduleMap, agents, assignments) {
     `;
 }
 
+function renderMealTimes(scheduleMap, agents, assignments) {
+    const LUNCH_SLOTS = ["11:00-11:30","11:30-12:00","12:00-12:30","12:30-13:00","13:00-13:30","13:30-14:00"];
+    const DINNER_SLOTS = ["17:00-17:30","17:30-18:00","18:00-18:30","18:30-19:00","19:00-19:30","19:30-20:00"];
+    const TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
+
+    const assignMap = {};
+    assignments.forEach(a => { assignMap[a.employee_name] = a; });
+
+    const working = agents.filter(a => {
+        const shift = scheduleMap[a.name];
+        if (!shift || LEAVE_SHIFTS.has(shift)) return false;
+        const assign = assignMap[a.name];
+        return assign && assign.work_types && assign.work_types.length > 0;
+    });
+
+    function buildCard(title, slots, slotKey) {
+        const teamSlotMap = {};
+        TEAM_ORDER.forEach(t => { teamSlotMap[t] = {}; slots.forEach(s => { teamSlotMap[t][s] = []; }); });
+
+        let hasData = false;
+        working.forEach(e => {
+            const assign = assignMap[e.name];
+            const slot = (assign && assign[slotKey]) ? assign[slotKey].trim() : '';
+            if (!slot || !slots.includes(slot)) return;
+            if (!teamSlotMap[e.team]) teamSlotMap[e.team] = {};
+            if (!teamSlotMap[e.team][slot]) teamSlotMap[e.team][slot] = [];
+            teamSlotMap[e.team][slot].push(e.name);
+            hasData = true;
+        });
+
+        const activeTeams = TEAM_ORDER.filter(t => teamSlotMap[t] && Object.values(teamSlotMap[t]).some(arr => arr.length > 0));
+
+        const tableHtml = hasData ? `
+            <table class="meal-table">
+                <thead>
+                    <tr>
+                        <th class="col-team">团队</th>
+                        ${slots.map(s => `<th class="col-slot">${s}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${activeTeams.map(team => `
+                        <tr>
+                            <td class="col-team team-bg-${team}">${team}</td>
+                            ${slots.map(slot => {
+                                const names = teamSlotMap[team][slot] || [];
+                                return `<td class="col-slot${names.length === 0 ? ' meal-empty' : ''}">${names.length ? names.join('<br>') : '-'}</td>`;
+                            }).join('')}
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>` : `<div style="color:#94a3b8;text-align:center;padding:20px 0;font-size:0.85rem;">暂无数据</div>`;
+
+        return `<div class="meal-card">
+            <div class="meal-card-title">${title}</div>
+            ${tableHtml}
+        </div>`;
+    }
+
+    document.getElementById("mealSection").innerHTML = `
+        <div class="meal-cols">
+            <div class="meal-col">${buildCard('午餐', LUNCH_SLOTS, 'lunch_slot')}</div>
+            <div class="meal-col">${buildCard('晚餐', DINNER_SLOTS, 'dinner_slot')}</div>
+        </div>
+    `;
+}
+
 async function init() {
     try {
         const today = todayStr();
@@ -686,6 +788,9 @@ async function init() {
 
         // 渲染工作安排汇总
         renderAssignments(scheduleMap, agents, assignments);
+
+        // 渲染用餐时间
+        renderMealTimes(scheduleMap, agents, assignments);
 
         // 月排班日历 + 明日排班
         renderCalendar(employees);
