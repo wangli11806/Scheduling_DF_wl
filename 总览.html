@@ -346,13 +346,21 @@ function yesterdayStr() {
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
-const LEAVE_SHIFTS = new Set(["休息","放休","请假"]);
+let restMap = {};
+let shiftHoursMap = {};
 
-function countWorking(scheduleMap, people) {
+function isEffWorking(shiftName, date, empName) {
+    const sh = shiftHoursMap[shiftName] || 0;
+    if (sh <= 0) return false;
+    const rh = restMap[date + '|' + empName] || 0;
+    return (sh - rh) > 0;
+}
+
+function countWorking(scheduleMap, people, date) {
     let w = 0;
     people.forEach(p => {
         const s = scheduleMap[p.name];
-        if (s && !LEAVE_SHIFTS.has(s)) w++;
+        if (s && isEffWorking(s, date, p.name)) w++;
     });
     return w;
 }
@@ -392,7 +400,7 @@ async function renderCalendar(employees) {
         let cnt = 0;
         agents.forEach(a => {
             const shift = schedMap[ds + '|' + a.name];
-            if (shift && !LEAVE_SHIFTS.has(shift)) cnt++;
+            if (shift && isEffWorking(shift, ds, a.name)) cnt++;
         });
         countMap[ds] = cnt;
         d.setDate(d.getDate() + 1);
@@ -472,7 +480,7 @@ async function renderTomorrow(employees) {
     // 明日上班的活跃员工
     const working = employees.filter(e => {
         const shift = schedMap[e.name];
-        return shift && !LEAVE_SHIFTS.has(shift);
+        return shift && isEffWorking(shift, tomorrow, e.name);
     });
     const supervisors = working.filter(e => e.position === '主管');
 
@@ -513,14 +521,14 @@ function formatDateStr(date) {
     return `${y}-${m}-${d}`;
 }
 
-function renderAssignments(scheduleMap, agents, assignments) {
+function renderAssignments(scheduleMap, agents, assignments, today) {
     const assignMap = {};
     assignments.forEach(a => { assignMap[a.employee_name] = a; });
 
-    // 只显示今日上班且有工作安排的员工
+    // 只显示今日有效上班且有工作安排的员工
     const working = agents.filter(a => {
         const shift = scheduleMap[a.name];
-        if (!shift || LEAVE_SHIFTS.has(shift)) return false;
+        if (!shift || !isEffWorking(shift, today, a.name)) return false;
         const assign = assignMap[a.name];
         return assign && assign.work_types && assign.work_types.length > 0;
     });
@@ -595,7 +603,7 @@ function renderAssignments(scheduleMap, agents, assignments) {
     `;
 }
 
-function renderMealTimes(scheduleMap, agents, assignments) {
+function renderMealTimes(scheduleMap, agents, assignments, today) {
     const LUNCH_SLOTS = ["11:00-11:30","11:30-12:00","12:00-12:30","12:30-13:00","13:00-13:30","13:30-14:00"];
     const DINNER_SLOTS = ["17:00-17:30","17:30-18:00","18:00-18:30","18:30-19:00","19:00-19:30","19:30-20:00"];
     const TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
@@ -605,7 +613,7 @@ function renderMealTimes(scheduleMap, agents, assignments) {
 
     const working = agents.filter(a => {
         const shift = scheduleMap[a.name];
-        if (!shift || LEAVE_SHIFTS.has(shift)) return false;
+        if (!shift || !isEffWorking(shift, today, a.name)) return false;
         const assign = assignMap[a.name];
         return assign && assign.work_types && assign.work_types.length > 0;
     });
@@ -671,15 +679,26 @@ async function init() {
         const weekday = "星期" + weekNames[new Date().getDay()];
         document.getElementById("dateTitle").textContent = `【${today} ${weekday}】今日排班`;
 
-        const [employees, todaySchedules, yesterdaySchedules, shifts, assignments] = await Promise.all([
+        const [employees, todaySchedules, yesterdaySchedules, shifts, restRecords, assignments] = await Promise.all([
             apiGet('/employees?status=active'),
             apiGet('/schedules?start=' + today + '&end=' + today),
             apiGet('/schedules?start=' + yesterday + '&end=' + yesterday),
             apiGet('/shifts'),
+            apiGet('/leave-records?type=rest'),
             apiGet('/assignments?date=' + today)
         ]);
         shiftDataMap = {};
         shifts.forEach(s => { shiftDataMap[s.name] = s; });
+
+        // 放休数据：key=日期|员工名 → 总放休小时
+        restMap = {};
+        restRecords.forEach(r => {
+            const key = r.leave_date + '|' + r.employee_name;
+            restMap[key] = (restMap[key] || 0) + r.hours;
+        });
+        // 班次工作时长映射
+        shiftHoursMap = {};
+        shifts.forEach(s => { shiftHoursMap[s.name] = s.work_hours || 0; });
 
         const scheduleMap = {};
         todaySchedules.forEach(s => { scheduleMap[s.employee_name] = s.shift_name; });
@@ -690,22 +709,22 @@ async function init() {
         const supervisors = employees.filter(e => e.position === '主管');
         const agents = employees.filter(e => e.position === '客服');
 
-        // 值班主管：今天排班不是休息/请假/放休
+        // 值班主管：今天有效上班
         const dutySupervisors = supervisors.filter(s => {
             const shift = scheduleMap[s.name];
-            return shift && !LEAVE_SHIFTS.has(shift);
+            return shift && isEffWorking(shift, today, s.name);
         });
 
         // 客服统计
         let agentWork = 0, agentLeave = 0;
         agents.forEach(a => {
             const shift = scheduleMap[a.name];
-            if (!shift || LEAVE_SHIFTS.has(shift)) agentLeave++;
+            if (!shift || !isEffWorking(shift, today, a.name)) agentLeave++;
             else agentWork++;
         });
 
         // 昨日上班人数（用于环比）
-        const yestWork = countWorking(yestScheduleMap, agents);
+        const yestWork = countWorking(yestScheduleMap, agents, yesterday);
         const diff = agentWork - yestWork;
         let deltaHTML = '';
         if (diff > 0) {
@@ -756,7 +775,7 @@ async function init() {
             const noSchedule = [];
             members.forEach(m => {
                 const shift = scheduleMap[m.name];
-                if (!shift || LEAVE_SHIFTS.has(shift)) {
+                if (!shift || !isEffWorking(shift, today, m.name)) {
                     noSchedule.push(m.name);
                 } else {
                     if (!byShift[shift]) byShift[shift] = [];
@@ -787,10 +806,10 @@ async function init() {
         }).join('');
 
         // 渲染工作安排汇总
-        renderAssignments(scheduleMap, agents, assignments);
+        renderAssignments(scheduleMap, agents, assignments, today);
 
         // 渲染用餐时间
-        renderMealTimes(scheduleMap, agents, assignments);
+        renderMealTimes(scheduleMap, agents, assignments, today);
 
         // 月排班日历 + 明日排班
         renderCalendar(employees);

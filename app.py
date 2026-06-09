@@ -1325,6 +1325,30 @@ def _calc_leave_hours(start_time, end_time):
     return round((em - sm) / 6) / 10
 
 
+def _validate_rest_hours(db, employee_name, leave_date, new_hours, exclude_id=None):
+    """校验放休总时长不超过当日排班班次的工作时长"""
+    # 查询当日排班班次的工作时长
+    row = db.execute(
+        "SELECT s.shift_name, sh.work_hours FROM schedules s LEFT JOIN shifts sh ON s.shift_name=sh.name WHERE s.schedule_date=? AND s.employee_name=?",
+        (leave_date, employee_name)
+    ).fetchone()
+    if not row or not row["work_hours"] or row["work_hours"] <= 0:
+        return  # 无有效班次，不校验
+    shift_hours = row["work_hours"]
+
+    # 查询当日已有放休总时长（排除当前编辑的记录）
+    sql = "SELECT COALESCE(SUM(hours),0) FROM leave_records WHERE type='rest' AND leave_date=? AND employee_name=?"
+    params = [leave_date, employee_name]
+    if exclude_id is not None:
+        sql += " AND id != ?"
+        params.append(exclude_id)
+    existing_rest = db.execute(sql, params).fetchone()[0]
+
+    total_rest = existing_rest + new_hours
+    if total_rest > shift_hours:
+        raise ValueError(f"放休时长({total_rest:.1f}h)超出当日班次工作时长({shift_hours:.1f}h)")
+
+
 @app.route("/api/leave-records", methods=["GET"])
 def api_leave_records_list():
     team = request.args.get("team", "").strip()
@@ -1392,6 +1416,13 @@ def api_leave_records_create():
     else:
         hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
 
+    # 放休时长校验：不能超过班次工作时长
+    if record_type == "rest":
+        try:
+            _validate_rest_hours(db, employee_name, leave_date, hours, exclude_id=None)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
     db.execute(
         "INSERT INTO leave_records(type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         (record_type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction)
@@ -1451,6 +1482,13 @@ def api_leave_records_update(record_id):
         hours = 0
     else:
         hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
+
+    # 放休时长校验：不能超过班次工作时长
+    if record_type == "rest":
+        try:
+            _validate_rest_hours(db, employee_name, leave_date, hours, exclude_id=record_id)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
 
     db.execute(
         "UPDATE leave_records SET type=?, team=?, leave_date=?, dongfu_id=?, employee_name=?, start_time=?, end_time=?, hours=?, remark=?, submitter=?, deduction=?, updated_at=datetime('now','localtime') WHERE id=?",

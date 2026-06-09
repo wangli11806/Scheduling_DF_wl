@@ -299,7 +299,15 @@ const API_BASE = '/api';
 const WORK_TYPES = ["热线","在线","工单","反向工单","自主售后","售后单","紧急","本地生活","卡密查询"];
 const LUNCH_SLOTS = ["","11:00-11:30","11:30-12:00","12:00-12:30","12:30-13:00","13:00-13:30","13:30-14:00"];
 const DINNER_SLOTS = ["","17:00-17:30","17:30-18:00","18:00-18:30","18:30-19:00","19:00-19:30","19:30-20:00"];
-const LEAVE_SHIFTS = new Set(["休息","放休","请假"]);
+let restMap = {};
+let shiftHoursMap = {};
+
+function isEffWorking(shiftName, dateStr, empName) {
+    const sh = shiftHoursMap[shiftName] || 0;
+    if (sh <= 0) return false;
+    const rh = restMap[dateStr + '|' + empName] || 0;
+    return (sh - rh) > 0;
+}
 
 let currentDate = new Date();
 let employees = [];
@@ -341,16 +349,26 @@ function getShift(dateStr, empName) {
 
 async function loadData() {
     const dateStr = formatDate(currentDate);
-    const [emps, schedules, shifts, assignments] = await Promise.all([
+    const [emps, schedules, shifts, restRecords, assignments] = await Promise.all([
         apiGet('/employees?status=active'),
         apiGet('/schedules?start=' + dateStr + '&end=' + dateStr),
         apiGet('/shifts'),
+        apiGet('/leave-records?type=rest'),
         apiGet('/assignments?date=' + dateStr)
     ]);
     employees = emps;
     scheduleMap.clear();
     schedules.forEach(s => { scheduleMap.set(`${s.schedule_date}|${s.employee_name}`, s.shift_name); });
     shiftOptions = shifts.map(s => s.name);
+
+    restMap = {};
+    restRecords.forEach(r => {
+        const key = r.leave_date + '|' + r.employee_name;
+        restMap[key] = (restMap[key] || 0) + r.hours;
+    });
+    shiftHoursMap = {};
+    shifts.forEach(s => { shiftHoursMap[s.name] = s.work_hours || 0; });
+
     assignmentMap = {};
     assignments.forEach(a => { assignmentMap[a.employee_name] = a; });
 }
@@ -359,7 +377,7 @@ function getWorkingEmployees() {
     const dateStr = formatDate(currentDate);
     return employees.filter(e => {
         const shift = getShift(dateStr, e.name);
-        return shift && !LEAVE_SHIFTS.has(shift);
+        return shift && isEffWorking(shift, dateStr, e.name);
     });
 }
 
