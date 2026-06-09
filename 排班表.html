@@ -459,42 +459,12 @@
     <div class="modal-dialog">
         <div class="modal-title">修改排班</div>
         <div class="modal-row">
-            <label>选择团队（可多选）</label>
-            <div class="multi-select" id="modalTeam">
-                <div class="multi-select-trigger" id="modalTeamTrigger">
-                    <span class="ms-placeholder">请选择团队</span>
-                </div>
-                <div class="ms-dropdown">
-                    <div class="ms-search">
-                        <input type="text" placeholder="搜索..." id="modalTeamSearch">
-                        <span class="ms-select-all" id="modalTeamAll">全选</span>
-                    </div>
-                    <div class="ms-options" id="modalTeamOptions"></div>
-                    <div class="ms-actions">
-                        <button class="btn btn-sm" id="modalTeamClear">清除</button>
-                        <button class="btn btn-sm btn-primary" id="modalTeamOk">确定</button>
-                    </div>
-                </div>
-            </div>
+            <label>选择团队</label>
+            <select id="modalTeam"></select>
         </div>
         <div class="modal-row">
-            <label>选择员工（可多选，基于所选团队）</label>
-            <div class="multi-select" id="modalEmployee">
-                <div class="multi-select-trigger" id="modalEmployeeTrigger">
-                    <span class="ms-placeholder">请先选择团队</span>
-                </div>
-                <div class="ms-dropdown">
-                    <div class="ms-search">
-                        <input type="text" placeholder="搜索..." id="modalEmployeeSearch">
-                        <span class="ms-select-all" id="modalEmployeeAll">全选</span>
-                    </div>
-                    <div class="ms-options" id="modalEmployeeOptions"></div>
-                    <div class="ms-actions">
-                        <button class="btn btn-sm" id="modalEmployeeClear">清除</button>
-                        <button class="btn btn-sm btn-primary" id="modalEmployeeOk">确定</button>
-                    </div>
-                </div>
-            </div>
+            <label>选择员工</label>
+            <select id="modalEmployee"><option value="">请先选择团队</option></select>
         </div>
         <div class="modal-row">
             <label>选择日期区间</label>
@@ -621,8 +591,8 @@
     let filterSelectedEmployees = getEmployeeNames();
     let filterSelectedTeams = [...getTeamOptions()];
     let filterSelectedShifts = [];
-    let modalSelectedTeams = [];
-    let modalSelectedEmployees = [];
+    let modalSelectedTeam = '';
+    let modalSelectedEmployee = '';
 
     function getEmployeeNames() { return employees.map(e => e.name); }
     function getEmployeesByTeams(teams) {
@@ -744,7 +714,6 @@
     }
 
     let msPageEmployee, msPageTeam, msPageShift;
-    let msModalTeam, msModalEmployee;
 
     function initAllMultiSelects() {
         msPageEmployee = initMultiSelect({
@@ -780,36 +749,13 @@
             onChange: () => { renderCurrentView(); }
         });
 
-        msModalTeam = initMultiSelect({
-            containerId: 'modalTeam', triggerId: 'modalTeamTrigger',
-            searchId: 'modalTeamSearch', selectAllId: 'modalTeamAll',
-            optionsId: 'modalTeamOptions', clearId: 'modalTeamClear',
-            okId: 'modalTeamOk', placeholder: '请选择团队',
-            getOptions: () => getTeamOptions(),
-            getSelected: () => modalSelectedTeams,
-            setSelected: (v) => {
-                modalSelectedTeams = v;
-                const validEmps = getEmployeesByTeams(modalSelectedTeams);
-                modalSelectedEmployees = modalSelectedEmployees.filter(e => validEmps.includes(e));
-                msModalEmployee.renderTrigger();
-                msModalEmployee.renderDropdown();
-            },
-            onChange: () => {
-                const validEmps = getEmployeesByTeams(modalSelectedTeams);
-                modalSelectedEmployees = modalSelectedEmployees.filter(e => validEmps.includes(e));
-                msModalEmployee.renderTrigger();
-                msModalEmployee.renderDropdown();
-            }
+        // 修改排班弹窗：团队变更时联动员工下拉
+        document.getElementById("modalTeam").addEventListener("change", function() {
+            modalSelectedTeam = this.value;
+            renderModalEmployeeSelect();
         });
-
-        msModalEmployee = initMultiSelect({
-            containerId: 'modalEmployee', triggerId: 'modalEmployeeTrigger',
-            searchId: 'modalEmployeeSearch', selectAllId: 'modalEmployeeAll',
-            optionsId: 'modalEmployeeOptions', clearId: 'modalEmployeeClear',
-            okId: 'modalEmployeeOk', placeholder: '请先选择团队',
-            getOptions: () => getEmployeesByTeams(modalSelectedTeams),
-            getSelected: () => modalSelectedEmployees,
-            setSelected: (v) => { modalSelectedEmployees = v; }
+        document.getElementById("modalEmployee").addEventListener("change", function() {
+            modalSelectedEmployee = this.value;
         });
     }
 
@@ -823,12 +769,29 @@
     }
 
     function resetModalSelections() {
-        modalSelectedTeams = [];
-        modalSelectedEmployees = [];
-        msModalTeam.renderTrigger();
-        msModalTeam.renderDropdown();
-        msModalEmployee.renderTrigger();
-        msModalEmployee.renderDropdown();
+        modalSelectedTeam = '';
+        modalSelectedEmployee = '';
+        renderModalTeamSelect();
+    }
+
+    function renderModalTeamSelect() {
+        const sel = document.getElementById("modalTeam");
+        sel.innerHTML = '<option value="">请选择团队</option>' +
+            getTeamOptions().map(t => `<option value="${t}">${t}</option>`).join('');
+        sel.value = modalSelectedTeam;
+    }
+
+    function renderModalEmployeeSelect() {
+        const sel = document.getElementById("modalEmployee");
+        if (!modalSelectedTeam) {
+            sel.innerHTML = '<option value="">请先选择团队</option>';
+            modalSelectedEmployee = '';
+            return;
+        }
+        const emps = getEmployeesByTeams([modalSelectedTeam]);
+        sel.innerHTML = '<option value="">请选择员工</option>' +
+            emps.map(e => `<option value="${e}">${e}</option>`).join('');
+        sel.value = modalSelectedEmployee;
     }
 
     // ========== 视图层 ==========
@@ -1136,7 +1099,8 @@
     }
 
     async function saveModalEdit() {
-        if(modalSelectedEmployees.length === 0) { showToast("请选择至少一名员工"); return; }
+        const emp = document.getElementById("modalEmployee").value;
+        if(!emp) { showToast("请选择员工"); return; }
         const startDate = document.getElementById("modalStartDate").value;
         const endDate = document.getElementById("modalEndDate").value;
         const shiftRadio = document.querySelector('input[name="modalShift"]:checked');
@@ -1149,16 +1113,14 @@
         const entries = [];
         while(cur <= end) {
             const dStr = formatDate(cur);
-            modalSelectedEmployees.forEach(emp => {
-                entries.push({ date: dStr, employee: emp, shift });
-                setShift(dStr, emp, shift);
-            });
+            entries.push({ date: dStr, employee: emp, shift });
+            setShift(dStr, emp, shift);
             cur.setDate(cur.getDate() + 1);
         }
         try {
             await apiPost('/schedules/batch', { entries });
             renderCurrentView();
-            showToast(`已为 ${modalSelectedEmployees.length} 名员工更新 ${entries.length} 条排班记录为 ${shift}`);
+            showToast(`已为 ${emp} 更新 ${entries.length} 条排班记录为 ${shift}`);
         } catch(e) {
             showToast(e.message);
         }
@@ -1270,22 +1232,6 @@
                 renderCurrentView();
                 return;
             }
-            const tag = e.target.closest(".shift-tag");
-            if (!tag) return;
-            const cell = tag.closest("td");
-            const row = tag.closest("tr");
-            const cells = [...row.children];
-            const colIndex = cells.indexOf(cell);
-            const empNameEl = cells[1]?.querySelector(".emp-name");
-            if (!empNameEl) return;
-            const employeeName = empNameEl.getAttribute("data-employee") || empNameEl.textContent.trim();
-            const table = tag.closest("table");
-            const headerCells = table.querySelectorAll("thead tr:first-child th");
-            const dateHeader = headerCells[colIndex];
-            const date = dateHeader ? dateHeader.textContent.trim() : null;
-            if (!date || !employeeName) return;
-            const currentShift = tag.getAttribute("data-shift");
-            showShiftPopover(tag, date, employeeName, currentShift);
         });
 
         // 气泡窗按钮
