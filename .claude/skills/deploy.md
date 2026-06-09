@@ -15,7 +15,7 @@ description: 提交代码 → 推送 Gitee → SSH 部署到阿里云 ECS → �
 
 - 运行 `git diff` 和 `git diff --cached` 查看具体改动
 - 生成一个中文 commit message，格式为 `v版本号: 简述变更内容`
-- 版本号参考 `git tag --sort=-v:refname | head -5` 的最新版本递增
+- 版本号参考 `git tag --sort=-v:refname | head -5` 的最新版本递增；若无 tag 则从 `v1.0` 开始
 - 提交前展示 commit message 给用户确认（如果用户已提供 message 则直接使用）
 
 如果工作区干净，检查 `git log @{u}..HEAD` 是否有未推送的提交。
