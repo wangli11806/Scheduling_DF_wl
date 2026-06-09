@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>客服排班系统 - 加班换班</title>
+    <title>客服排班系统 - 排班调整</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="shared.css">
     <style>
@@ -151,7 +151,7 @@
             </div>
         </div>
         <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
-        <a class="nav-item active" data-page="leave">加班换班</a>
+        <a class="nav-item active" data-page="leave">排班调整</a>
         <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
         <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
         <a class="nav-item" data-page="notify" href="通知设置.html">通知设置</a>
@@ -168,7 +168,7 @@
 <!-- 主内容区 -->
 <div class="main-area">
     <div class="header-bar">
-        <h1>加班换班</h1>
+        <h1>排班调整</h1>
     </div>
 
     <div class="content-body">
@@ -207,6 +207,15 @@
                     </div>
                 </div>
             </div>
+            <div class="filter-field">
+                <label>记录类型</label>
+                <select id="filterType">
+                    <option value="">全部类型</option>
+                    <option value="overtime">加班</option>
+                    <option value="leave">请假</option>
+                    <option value="rest">放休</option>
+                </select>
+            </div>
             <div class="filter-buttons">
                 <button class="btn" id="resetFilterBtn">重置</button>
                 <button class="btn btn-primary" id="queryBtn">查询</button>
@@ -216,13 +225,15 @@
         <!-- 操作栏 -->
         <div class="action-bar">
             <button class="btn btn-primary" id="addRecordBtn">加班申请</button>
+            <button class="btn btn-primary" id="leaveRequestBtn">请假申请</button>
+            <button class="btn btn-primary" id="restRequestBtn">放休申请</button>
             <button class="btn btn-primary" id="swapShiftBtn">换班申请</button>
             <button class="btn btn-primary" id="swapRestBtn">换休申请</button>
             <button class="btn" id="exportBtn">导出Excel</button>
         </div>
 
-        <!-- 加班明细 -->
-        <div class="section-title">加班明细 <span class="info-text" id="tableInfo">共 0 条记录</span></div>
+        <!-- 排班调整记录 -->
+        <div class="section-title">排班调整记录 <span class="info-text" id="tableInfo">共 0 条记录</span></div>
         <div class="table-wrapper">
             <table class="data-table">
                 <thead>
@@ -231,10 +242,11 @@
                         <th>所属团队</th>
                         <th>东福工号</th>
                         <th>员工</th>
-                        <th>加班日期</th>
+                        <th>类型</th>
+                        <th>日期</th>
                         <th>开始时间</th>
                         <th>结束时间</th>
-                        <th>加班时长(h)</th>
+                        <th>时长(h)</th>
                         <th>备注</th>
                         <th>提交人</th>
                         <th>最后修改时间</th>
@@ -333,12 +345,63 @@
     </div>
 </div>
 
+<!-- 请假申请弹窗 -->
+<div class="modal-overlay" id="leaveModal">
+    <div class="modal-dialog">
+        <div class="modal-title" id="leaveModalTitle">请假申请</div>
+        <div class="modal-row"><label class="required">所属团队</label><select id="leaveModalTeam"></select></div>
+        <div class="modal-row"><label class="required">员工</label><select id="leaveModalEmployee"><option value="">请先选择团队</option></select></div>
+        <div class="modal-row"><label class="required">请假日期</label><input type="date" id="leaveModalDate"></div>
+        <div class="modal-row"><label>备注</label><textarea id="leaveModalRemark" maxlength="200" placeholder="选填，最多200字"></textarea><div class="char-count"><span id="leaveModalRemarkCount">0</span>/200</div></div>
+        <div class="modal-row"><label class="required">提交人</label><div class="submitter-options" id="leaveModalSubmitterOptions"></div></div>
+        <div class="modal-actions">
+            <button class="btn" id="leaveModalCancelBtn">取消</button>
+            <button class="btn btn-primary" id="leaveModalSaveBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 放休申请弹窗 -->
+<div class="modal-overlay" id="restModal">
+    <div class="modal-dialog">
+        <div class="modal-title" id="restModalTitle">放休申请</div>
+        <div class="modal-row"><label class="required">所属团队</label><select id="restModalTeam"></select></div>
+        <div class="modal-row"><label class="required">员工</label><select id="restModalEmployee"><option value="">请先选择团队</option></select></div>
+        <div class="modal-row"><label class="required">放休日期</label><input type="date" id="restModalDate"></div>
+        <div class="modal-row" style="flex-direction:row; gap:16px;">
+            <div style="flex:1;"><label class="required">放休开始时间</label><input type="time" id="restModalStartTime"></div>
+            <div style="flex:1;"><label class="required">放休结束时间</label><input type="time" id="restModalEndTime"></div>
+        </div>
+        <div class="modal-row">
+            <label>扣除餐休</label>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="restModalDeductionToggle">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span id="restDeductionLabel" style="font-size:0.92rem;color:#94a3b8;">关闭</span>
+                <span id="restDeductionInputGroup" style="display:none;align-items:center;gap:8px;">
+                    <span>扣除时长</span>
+                    <input type="number" id="restModalDeduction" step="0.1" min="0.1" max="8.0" placeholder="0.0" style="width:80px;">
+                    <span>小时</span>
+                </span>
+            </div>
+        </div>
+        <div class="modal-row"><label>备注</label><textarea id="restModalRemark" maxlength="200" placeholder="选填，最多200字"></textarea><div class="char-count"><span id="restModalRemarkCount">0</span>/200</div></div>
+        <div class="modal-row"><label class="required">提交人</label><div class="submitter-options" id="restModalSubmitterOptions"></div></div>
+        <div class="modal-actions">
+            <button class="btn" id="restModalCancelBtn">取消</button>
+            <button class="btn btn-primary" id="restModalSaveBtn">保存</button>
+        </div>
+    </div>
+</div>
+
 <!-- 删除确认弹窗 -->
 <div class="modal-overlay" id="deleteModal">
     <div class="modal-dialog" style="text-align:center;">
         <div class="modal-title">确认删除</div>
         <p style="font-size:0.92rem; color:#64748b; margin-bottom:8px;">
-            确定要删除 <strong id="deleteRecordInfo"></strong> 的调休记录吗？
+            确定要删除 <strong id="deleteRecordInfo"></strong> 的记录吗？
         </p>
         <p style="font-size:0.85rem; color:#94a3b8;">此操作不可撤销</p>
         <div class="modal-actions" style="justify-content:center;">
@@ -434,6 +497,7 @@
     let employees = [];
     let filterTeam = '';
     let filterMonth = '';
+    let filterType = '';
     let filterEmployees = [];
     let monthDisplay = new Date(); // 用于月份选择器导航
 
@@ -480,6 +544,7 @@
         const params = new URLSearchParams();
         if (filterTeam) params.set('team', filterTeam);
         if (filterMonth) params.set('month', filterMonth);
+        if (filterType) params.set('type', filterType);
         const qs = params.toString();
         records = await apiGet('/leave-records' + (qs ? '?' + qs : ''));
     }
@@ -509,26 +574,37 @@
         if (currentVal) sel.value = currentVal;
     }
 
+    const TYPE_BADGES = {
+        overtime: '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#fef3c7;color:#d97706;">加班</span>',
+        leave: '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#fff3e0;color:#bf360c;">请假</span>',
+        rest: '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#dcfce7;color:#16a34a;">放休</span>'
+    };
+
     function renderTable() {
         const filtered = getFilteredRecords();
         const tbody = document.getElementById("tableBody");
         document.getElementById("tableInfo").textContent = `共 ${filtered.length} 条记录`;
 
         if (filtered.length === 0) {
-            tbody.innerHTML = `<tr class="empty-row"><td colspan="12">暂无调休记录</td></tr>`;
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="13">暂无记录</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = filtered.map(r => `
+        tbody.innerHTML = filtered.map(r => {
+            const rtype = r.type || 'overtime';
+            const isLeave = rtype === 'leave';
+            const typeBadge = TYPE_BADGES[rtype] || TYPE_BADGES['overtime'];
+            return `
             <tr>
                 <td style="font-weight:500; color:#6366f1;">${r.id}</td>
                 <td><span class="team-badge">${r.team}</span></td>
                 <td>${r.dongfu_id || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td style="font-weight:600;">${r.employee_name}</td>
+                <td>${typeBadge}</td>
                 <td>${r.leave_date}</td>
-                <td>${r.start_time}</td>
-                <td>${r.end_time}</td>
-                <td style="font-weight:600;">${r.hours.toFixed(1)}</td>
+                <td>${isLeave ? '<span style="color:#94a3b8;">-</span>' : r.start_time}</td>
+                <td>${isLeave ? '<span style="color:#94a3b8;">-</span>' : r.end_time}</td>
+                <td style="font-weight:600;">${isLeave ? '<span style="color:#94a3b8;">-</span>' : r.hours.toFixed(1)}</td>
                 <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${(r.remark || '').replace(/"/g, '&quot;')}">${r.remark || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td>${r.submitter || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td style="font-size:0.85rem; color:#64748b;">${r.updated_at || r.created_at || '-'}</td>
@@ -537,7 +613,8 @@
                     <button class="btn btn-sm btn-danger delete-btn" data-id="${r.id}">删除</button>
                 </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
         tbody.querySelectorAll('.edit-btn').forEach(btn => {
             btn.addEventListener('click', () => openEditModal(parseInt(btn.getAttribute('data-id'))));
@@ -656,14 +733,26 @@
     function openEditModal(recordId) {
         const record = records.find(r => r.id === recordId);
         if (!record) return;
-        editingRecordId = recordId;
+        const rtype = record.type || 'overtime';
+
+        if (rtype === 'leave') {
+            openEditLeaveModal(record);
+        } else if (rtype === 'rest') {
+            openEditRestModal(record);
+        } else {
+            openEditOvertimeModal(record);
+        }
+    }
+
+    function openEditOvertimeModal(record) {
+        editingRecordId = record.id;
         document.getElementById("modalTitle").textContent = "编辑加班申请";
         renderTeamSelect("modalTeam", record.team);
         document.getElementById("modalLeaveDate").value = record.leave_date;
         renderEmployeeSelect(record.team);
         document.getElementById("modalEmployee").value = record.employee_name;
-        document.getElementById("modalStartTime").value = record.start_time;
-        document.getElementById("modalEndTime").value = record.end_time;
+        document.getElementById("modalStartTime").value = record.start_time || '';
+        document.getElementById("modalEndTime").value = record.end_time || '';
         document.getElementById("modalRemark").value = record.remark || "";
         document.getElementById("remarkCount").textContent = (record.remark || "").length;
         const deduction = record.deduction || 0;
@@ -680,6 +769,184 @@
         }
         renderSupervisorOptions("modalSubmitterOptions", record.submitter);
         document.getElementById("recordModal").classList.add("active");
+    }
+
+    // ========== 请假申请弹窗 ==========
+    let editingLeaveRecordId = null;
+
+    function openLeaveModal() {
+        editingLeaveRecordId = null;
+        document.getElementById("leaveModalTitle").textContent = "请假申请";
+        renderTeamSelect("leaveModalTeam", "");
+        document.getElementById("leaveModalDate").value = new Date().toISOString().slice(0, 10);
+        document.getElementById("leaveModalEmployee").innerHTML = '<option value="">请先选择团队</option>';
+        document.getElementById("leaveModalRemark").value = "";
+        document.getElementById("leaveModalRemarkCount").textContent = "0";
+        renderSupervisorOptions("leaveModalSubmitterOptions", "");
+        document.getElementById("leaveModal").classList.add("active");
+    }
+
+    function openEditLeaveModal(record) {
+        editingLeaveRecordId = record.id;
+        document.getElementById("leaveModalTitle").textContent = "编辑请假申请";
+        renderTeamSelect("leaveModalTeam", record.team);
+        document.getElementById("leaveModalDate").value = record.leave_date;
+        renderEmployeeSelectForModal("leaveModalTeam", "leaveModalEmployee", record.team);
+        setTimeout(() => { document.getElementById("leaveModalEmployee").value = record.employee_name; }, 50);
+        document.getElementById("leaveModalRemark").value = record.remark || "";
+        document.getElementById("leaveModalRemarkCount").textContent = (record.remark || "").length;
+        renderSupervisorOptions("leaveModalSubmitterOptions", record.submitter);
+        document.getElementById("leaveModal").classList.add("active");
+    }
+
+    function closeLeaveModal() {
+        document.getElementById("leaveModal").classList.remove("active");
+    }
+
+    async function saveLeaveRecord() {
+        const team = document.getElementById("leaveModalTeam").value;
+        const leaveDate = document.getElementById("leaveModalDate").value;
+        const employeeName = document.getElementById("leaveModalEmployee").value;
+        const remark = document.getElementById("leaveModalRemark").value.trim();
+        const submitter = getSelectedSupervisor("leaveModalSubmitterOptions");
+
+        if (!team) { showToast("请选择所属团队"); return; }
+        if (!leaveDate) { showToast("请选择请假日期"); return; }
+        if (!employeeName) { showToast("请选择员工"); return; }
+        if (!submitter) { showToast("请选择提交人"); return; }
+        if (remark.length > 200) { showToast("备注不能超过200字符"); return; }
+
+        const data = { type: 'leave', team, leaveDate, employeeName, startTime: '', endTime: '', remark, submitter, deduction: 0 };
+
+        try {
+            if (editingLeaveRecordId) {
+                await apiPut('/leave-records/' + editingLeaveRecordId, data);
+                showToast("请假记录已更新");
+            } else {
+                await apiPost('/leave-records', data);
+                showToast("请假申请已提交");
+            }
+            closeLeaveModal();
+            await loadRecords();
+            refreshAll();
+        } catch (e) {
+            showToast(e.message);
+        }
+    }
+
+    // ========== 放休申请弹窗 ==========
+    let editingRestRecordId = null;
+
+    function openRestModal() {
+        editingRestRecordId = null;
+        document.getElementById("restModalTitle").textContent = "放休申请";
+        renderTeamSelect("restModalTeam", "");
+        document.getElementById("restModalDate").value = new Date().toISOString().slice(0, 10);
+        document.getElementById("restModalEmployee").innerHTML = '<option value="">请先选择团队</option>';
+        document.getElementById("restModalStartTime").value = "";
+        document.getElementById("restModalEndTime").value = "";
+        document.getElementById("restModalRemark").value = "";
+        document.getElementById("restModalRemarkCount").textContent = "0";
+        document.getElementById("restModalDeductionToggle").checked = false;
+        document.getElementById("restModalDeduction").value = "";
+        document.getElementById("restDeductionLabel").textContent = "关闭";
+        document.getElementById("restDeductionInputGroup").style.display = "none";
+        renderSupervisorOptions("restModalSubmitterOptions", "");
+        document.getElementById("restModal").classList.add("active");
+    }
+
+    function openEditRestModal(record) {
+        editingRestRecordId = record.id;
+        document.getElementById("restModalTitle").textContent = "编辑放休申请";
+        renderTeamSelect("restModalTeam", record.team);
+        document.getElementById("restModalDate").value = record.leave_date;
+        renderEmployeeSelectForModal("restModalTeam", "restModalEmployee", record.team);
+        setTimeout(() => { document.getElementById("restModalEmployee").value = record.employee_name; }, 50);
+        document.getElementById("restModalStartTime").value = record.start_time || '';
+        document.getElementById("restModalEndTime").value = record.end_time || '';
+        document.getElementById("restModalRemark").value = record.remark || "";
+        document.getElementById("restModalRemarkCount").textContent = (record.remark || "").length;
+        const deduction = record.deduction || 0;
+        if (deduction > 0) {
+            document.getElementById("restModalDeductionToggle").checked = true;
+            document.getElementById("restModalDeduction").value = deduction;
+            document.getElementById("restDeductionLabel").textContent = "开启";
+            document.getElementById("restDeductionInputGroup").style.display = "flex";
+        } else {
+            document.getElementById("restModalDeductionToggle").checked = false;
+            document.getElementById("restModalDeduction").value = "";
+            document.getElementById("restDeductionLabel").textContent = "关闭";
+            document.getElementById("restDeductionInputGroup").style.display = "none";
+        }
+        renderSupervisorOptions("restModalSubmitterOptions", record.submitter);
+        document.getElementById("restModal").classList.add("active");
+    }
+
+    function closeRestModal() {
+        document.getElementById("restModal").classList.remove("active");
+    }
+
+    async function saveRestRecord() {
+        const team = document.getElementById("restModalTeam").value;
+        const leaveDate = document.getElementById("restModalDate").value;
+        const employeeName = document.getElementById("restModalEmployee").value;
+        const startTime = document.getElementById("restModalStartTime").value;
+        const endTime = document.getElementById("restModalEndTime").value;
+        const remark = document.getElementById("restModalRemark").value.trim();
+        const submitter = getSelectedSupervisor("restModalSubmitterOptions");
+
+        if (!team) { showToast("请选择所属团队"); return; }
+        if (!leaveDate) { showToast("请选择放休日期"); return; }
+        if (!employeeName) { showToast("请选择员工"); return; }
+        if (!startTime) { showToast("请选择放休开始时间"); return; }
+        if (!endTime) { showToast("请选择放休结束时间"); return; }
+        if (!submitter) { showToast("请选择提交人"); return; }
+        if (remark.length > 200) { showToast("备注不能超过200字符"); return; }
+
+        const deductionToggle = document.getElementById("restModalDeductionToggle").checked;
+        let deduction = 0;
+        if (deductionToggle) {
+            const val = parseFloat(document.getElementById("restModalDeduction").value);
+            if (isNaN(val) || val < 0.1 || val > 8.0) {
+                showToast("扣除时长需在0.1~8.0小时之间");
+                return;
+            }
+            deduction = val;
+        }
+
+        const data = { type: 'rest', team, leaveDate, employeeName, startTime, endTime, remark, submitter, deduction };
+
+        try {
+            if (editingRestRecordId) {
+                await apiPut('/leave-records/' + editingRestRecordId, data);
+                showToast("放休记录已更新");
+            } else {
+                await apiPost('/leave-records', data);
+                showToast("放休申请已提交");
+            }
+            closeRestModal();
+            await loadRecords();
+            refreshAll();
+        } catch (e) {
+            showToast(e.message);
+            showToast(e.message);
+        }
+    }
+
+    // ========== 辅助：员工选择联动 ==========
+    function renderEmployeeSelectForModal(teamSelectId, empSelectId, team) {
+        const sel = document.getElementById(empSelectId);
+        if (!team) {
+            sel.innerHTML = '<option value="">请先选择团队</option>';
+            return;
+        }
+        const teamEmps = getEmployeesByTeam(team);
+        if (teamEmps.length === 0) {
+            sel.innerHTML = '<option value="">该团队无员工</option>';
+            return;
+        }
+        sel.innerHTML = '<option value="">请选择员工</option>' +
+            teamEmps.map(e => `<option value="${e.name}">${e.name}</option>`).join('');
     }
 
     function closeRecordModal() {
@@ -714,7 +981,7 @@
             deduction = val;
         }
 
-        const data = { team, leaveDate, employeeName, startTime, endTime, remark, submitter, deduction };
+        const data = { type: 'overtime', team, leaveDate, employeeName, startTime, endTime, remark, submitter, deduction };
 
         try {
             if (editingRecordId) {
@@ -735,11 +1002,14 @@
     // 删除
     let deleteTargetId = null;
 
+    const DELETE_TYPE_LABELS = { overtime: '加班', leave: '请假', rest: '放休' };
+
     function openDeleteModal(recordId) {
         deleteTargetId = recordId;
         const record = records.find(r => r.id === recordId);
+        const typeLabel = DELETE_TYPE_LABELS[record?.type] || '加班';
         document.getElementById("deleteRecordInfo").textContent = record
-            ? `${record.employee_name} ${record.leave_date}`
+            ? `${record.employee_name} ${record.leave_date} 的${typeLabel}记录`
             : '';
         document.getElementById("deleteModal").classList.add("active");
     }
@@ -1018,6 +1288,8 @@
         refreshAll();
 
         document.getElementById("addRecordBtn").addEventListener("click", openAddModal);
+        document.getElementById("leaveRequestBtn").addEventListener("click", openLeaveModal);
+        document.getElementById("restRequestBtn").addEventListener("click", openRestModal);
         document.getElementById("swapShiftBtn").addEventListener("click", () => openSwapModal('shift'));
         document.getElementById("swapRestBtn").addEventListener("click", () => openSwapModal('rest'));
 
@@ -1033,8 +1305,10 @@
         document.getElementById("resetFilterBtn").addEventListener("click", async () => {
             filterTeam = '';
             filterMonth = '';
+            filterType = '';
             filterEmployees = [];
             document.getElementById("filterTeam").value = '';
+            document.getElementById("filterType").value = '';
             monthDisplay = new Date();
             updateMonthLabel();
             document.getElementById("filterEmployeeTrigger").innerHTML = '<span class="ms-placeholder">全部员工</span>';
@@ -1047,6 +1321,7 @@
         document.getElementById("queryBtn").addEventListener("click", async () => {
             filterTeam = document.getElementById("filterTeam").value;
             filterMonth = getMonthStr(monthDisplay);
+            filterType = document.getElementById("filterType").value;
             await loadRecords();
             await loadSwapRecords();
             renderTable();
@@ -1069,6 +1344,20 @@
         document.getElementById("modalSaveBtn").addEventListener("click", saveRecord);
         document.getElementById("recordModal").addEventListener("click", (e) => {
             if (e.target === document.getElementById("recordModal")) closeRecordModal();
+        });
+
+        // 请假弹窗
+        document.getElementById("leaveModalCancelBtn").addEventListener("click", closeLeaveModal);
+        document.getElementById("leaveModalSaveBtn").addEventListener("click", saveLeaveRecord);
+        document.getElementById("leaveModal").addEventListener("click", (e) => {
+            if (e.target === document.getElementById("leaveModal")) closeLeaveModal();
+        });
+
+        // 放休弹窗
+        document.getElementById("restModalCancelBtn").addEventListener("click", closeRestModal);
+        document.getElementById("restModalSaveBtn").addEventListener("click", saveRestRecord);
+        document.getElementById("restModal").addEventListener("click", (e) => {
+            if (e.target === document.getElementById("restModal")) closeRestModal();
         });
 
         document.getElementById("deleteCancelBtn").addEventListener("click", closeDeleteModal);
@@ -1115,6 +1404,34 @@
                 label.textContent = "关闭";
                 group.style.display = "none";
                 document.getElementById("modalDeduction").value = "";
+            }
+        });
+
+        // 请假弹窗团队联动
+        document.getElementById("leaveModalTeam").addEventListener("change", function() {
+            renderEmployeeSelectForModal("leaveModalTeam", "leaveModalEmployee", this.value);
+        });
+        document.getElementById("leaveModalRemark").addEventListener("input", function() {
+            document.getElementById("leaveModalRemarkCount").textContent = this.value.length;
+        });
+
+        // 放休弹窗团队联动
+        document.getElementById("restModalTeam").addEventListener("change", function() {
+            renderEmployeeSelectForModal("restModalTeam", "restModalEmployee", this.value);
+        });
+        document.getElementById("restModalRemark").addEventListener("input", function() {
+            document.getElementById("restModalRemarkCount").textContent = this.value.length;
+        });
+        document.getElementById("restModalDeductionToggle").addEventListener("change", function() {
+            const label = document.getElementById("restDeductionLabel");
+            const group = document.getElementById("restDeductionInputGroup");
+            if (this.checked) {
+                label.textContent = "开启";
+                group.style.display = "flex";
+            } else {
+                label.textContent = "关闭";
+                group.style.display = "none";
+                document.getElementById("restModalDeduction").value = "";
             }
         });
 

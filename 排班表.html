@@ -189,6 +189,29 @@
         }
         .leave-badge:hover .leave-tooltip { display: block; }
 
+        /* 放休标记 */
+        .rest-badge {
+            position: relative; display: inline-block;
+            padding: 2px 7px; border-radius: 4px;
+            background: #22c55e; color: white; font-size: 0.72rem;
+            font-weight: 600; cursor: pointer; margin-left: 4px;
+            vertical-align: middle; line-height: 1.4;
+        }
+        .rest-badge:hover { background: #16a34a; }
+        .rest-tooltip {
+            display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
+            transform: translateX(-50%); background: #1e293b; color: white;
+            padding: 5px 12px; border-radius: 8px; font-size: 0.85rem;
+            white-space: nowrap; z-index: 100; font-weight: 500;
+            pointer-events: none;
+        }
+        .rest-tooltip::after {
+            content: ''; position: absolute; top: 100%; left: 50%;
+            transform: translateX(-50%); border: 6px solid transparent;
+            border-top-color: #1e293b;
+        }
+        .rest-badge:hover .rest-tooltip { display: block; }
+
         /* 换班/换休标记 */
         .swap-badge {
             position: relative; display: inline-block;
@@ -288,7 +311,7 @@
             </div>
         </div>
         <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
-        <a class="nav-item" data-page="leave" href="加班换班.html">加班换班</a>
+        <a class="nav-item" data-page="leave" href="排班调整.html">排班调整</a>
         <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
         <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>
         <a class="nav-item" data-page="notify" href="通知设置.html">通知设置</a>
@@ -535,20 +558,30 @@
     let shiftOptions = [];
     let workShifts = [];
     let employees = [];
-    let leaveMap = new Map(); // key: `${date}|${employeeName}` → [{hours, start_time, end_time}, ...]
-    let swapMap = new Map(); // key: `${date}|${employeeName}` → [{swapType, otherPerson, otherDate, remark}, ...]
+    let leaveMap = new Map(); // key: `${date}|${employeeName}` → overtime records
+    let restMap = new Map();  // key: `${date}|${employeeName}` → rest records
+    let swapMap = new Map();  // key: `${date}|${employeeName}` → [{swapType, otherPerson, otherDate, remark}, ...]
 
     async function loadLeaveRecords() {
         try {
             const data = await apiGet('/leave-records');
             leaveMap.clear();
+            restMap.clear();
             data.forEach(r => {
                 const key = `${r.leave_date}|${r.employee_name}`;
-                if (!leaveMap.has(key)) leaveMap.set(key, []);
-                leaveMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time });
+                const rtype = r.type || 'overtime';
+                if (rtype === 'rest') {
+                    if (!restMap.has(key)) restMap.set(key, []);
+                    restMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time });
+                } else if (rtype === 'overtime') {
+                    if (!leaveMap.has(key)) leaveMap.set(key, []);
+                    leaveMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time });
+                }
+                // 请假记录不加入 badge 显示（已反映为 SHF009 班次）
             });
         } catch (e) {
             leaveMap.clear();
+            restMap.clear();
         }
     }
 
@@ -893,6 +926,12 @@
                                     let tooltipParts = leaveRecords.map(r => `加班${r.hours.toFixed(1)}h（${r.start_time}-${r.end_time}）`);
                                     leaveHtml = `<span class="leave-badge" data-employee="${emp.name}" title="${tooltipParts.join('; ').replace(/"/g, '&quot;')}">加班<span class="leave-tooltip">${tooltipParts.join('<br>')}</span></span>`;
                                 }
+                                let restRecords = restMap.get(leaveKey);
+                                let restHtml = '';
+                                if (restRecords && restRecords.length > 0) {
+                                    let tooltipParts = restRecords.map(r => `放休${r.hours.toFixed(1)}h（${r.start_time}-${r.end_time}）`);
+                                    restHtml = `<span class="rest-badge" data-employee="${emp.name}" title="${tooltipParts.join('; ').replace(/"/g, '&quot;')}">放休<span class="rest-tooltip">${tooltipParts.join('<br>')}</span></span>`;
+                                }
                                 let swapRecords = swapMap.get(leaveKey);
                                 let swapHtml = '';
                                 if (swapRecords && swapRecords.length > 0) {
@@ -902,7 +941,7 @@
                                     let tips = swapRecords.map(s => `${s.swapType === 'shift_swap' ? '换班' : '换休'}→${s.otherPerson}(${s.otherDate})`).join('<br>');
                                     swapHtml = `<span class="swap-badge ${cls2}">${label}<span class="swap-tooltip">${tips}</span></span>`;
                                 }
-                                return `<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;"><span class="shift-tag ${cls}" data-shift="${shiftVal}">${shiftVal}</span>${leaveHtml}${swapHtml}</div></td>`;
+                                return `<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;"><span class="shift-tag ${cls}" data-shift="${shiftVal}">${shiftVal}</span>${leaveHtml}${restHtml}${swapHtml}</div></td>`;
                             }).join('')}
                         </tr>
                     `).join('')}
@@ -918,7 +957,15 @@
             badge.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const empName = badge.getAttribute('data-employee');
-                window.location.href = `加班换班.html?employee=${encodeURIComponent(empName)}`;
+                window.location.href = `排班调整.html?employee=${encodeURIComponent(empName)}`;
+            });
+        });
+        // 放休标记点击跳转
+        container.querySelectorAll('.rest-badge').forEach(badge => {
+            badge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const empName = badge.getAttribute('data-employee');
+                window.location.href = `排班调整.html?employee=${encodeURIComponent(empName)}`;
             });
         });
         renderLegend();
@@ -1326,7 +1373,7 @@
                 } else if(page === 'work') {
                     window.location.href = '工作安排.html';
                 } else if(page === 'leave') {
-                    window.location.href = '加班换班.html';
+                    window.location.href = '排班调整.html';
                 } else if(page === 'notify') {
                     window.location.href = '通知设置.html';
                 } else if(page === 'monthly-hours') {

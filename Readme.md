@@ -52,7 +52,7 @@ python app.py
 ├── 排班表.html             # 排班表（日/周/月视图）
 ├── 原始排班.html           # 原始排班表
 ├── 工作安排.html           # 工作安排
-├── 加班换班.html           # 加班换班
+├── 排班调整.html           # 排班调整
 ├── 员工管理.html           # 员工管理（CRUD + 导入）
 ├── 班次设置.html           # 班次设置
 ├── 通知设置.html           # 钉钉通知设置
@@ -126,23 +126,26 @@ python app.py
 | dinner_slot | TEXT | 晚餐时段（可空） |
 | UNIQUE(date, employee_name) | | 每人每天只能有一条安排 |
 
-### leave_records（加班记录表）
+### leave_records（排班调整记录表：加班/请假/放休）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 自增 |
+| type | TEXT | overtime=加班 / leave=请假 / rest=放休 |
 | team | TEXT | 所属团队 |
-| leave_date | TEXT | 加班日期 YYYY-MM-DD |
+| leave_date | TEXT | 加班/请假/放休日期 YYYY-MM-DD |
 | dongfu_id | TEXT | 东福工号（自动查询填入） |
 | employee_name | TEXT | 员工姓名 |
-| start_time | TEXT | 加班开始时间 HH:MM |
-| end_time | TEXT | 加班结束时间 HH:MM |
-| hours | REAL | 加班时长（自动计算，支持跨天、扣除餐休） |
+| start_time | TEXT | 开始时间 HH:MM（请假为空） |
+| end_time | TEXT | 结束时间 HH:MM（请假为空） |
+| hours | REAL | 时长（自动计算，支持跨天、扣除餐休；请假为0） |
 | remark | TEXT | 备注（最多200字） |
 | submitter | TEXT | 提交人（从主管中选择） |
 | deduction | REAL | 扣除餐休时长（0表示未扣除） |
 | created_at | TEXT | 创建时间 |
 | updated_at | TEXT | 最后修改时间 |
+
+> 请假提交后自动同步排班表为 SHF009（请假）。删除请假记录时同步清除排班。加班和放休不修改排班，在排班表上以 tag 形式显示。
 
 ### swap_records（换班/换休记录表）
 
@@ -217,24 +220,32 @@ POST   /api/assignments                  批量保存 {date, assignments: [{empl
 
 工作类型：热线、在线、工单、反向工单、自主售后、售后单、紧急、本地生活、卡密查询
 
-### 加班换班
+### 排班调整
 
 ```
-GET    /api/leave-records?team=&month=   加班列表（支持团队、月份筛选）
-POST   /api/leave-records                新增加班记录（自动计算时长、支持扣除餐休）
-PUT    /api/leave-records/<id>           编辑加班记录
-DELETE /api/leave-records/<id>           删除加班记录
+GET    /api/leave-records?team=&month=&type=  列表（支持团队、月份、类型筛选）
+POST   /api/leave-records                     新增（type=overtime/leave/rest）
+PUT    /api/leave-records/<id>                编辑
+DELETE /api/leave-records/<id>                删除（leave 类型同步清除排班）
 GET    /api/leave-records/export?team=&month=&employees=  Excel 导出
-GET    /api/schedule/lookup?employee=&date=  查询某员工某日排班
-GET    /api/swap-records?team=&month=    换班记录列表（受页面筛选器控制）
-POST   /api/swap-records                 提交换班/换休（互换班次，换休自动创建加班记录）
+GET    /api/schedule/lookup?employee=&date=   查询某员工某日排班
+GET    /api/swap-records?team=&month=         换班记录列表
+POST   /api/swap-records                      提交换班/换休
 ```
 
-**加班时长计算**：结束时间 - 开始时间 - 扣除餐休时长（若开启）
+**三种记录类型**：
+
+| type | 说明 | 时间字段 | 排班影响 |
+|------|------|----------|----------|
+| overtime | 加班 | 必填 | 不修改排班，排班表显示红色"加班"tag |
+| leave | 请假 | 不需要 | 自动将排班改为 SHF009（请假）；删除记录时清除排班 |
+| rest | 放休 | 必填 | 不修改排班，排班表显示绿色"放休"tag |
+
+**时长计算**（overtime/rest）：结束时间 - 开始时间 - 扣除餐休时长（若开启），支持跨天。
 
 **换班逻辑**：交换两个日期上两人的排班班次。换休时额外自动为休息变上班的员工创建加班记录，工时取所换班次的 `work_hours`。
 
-导出时开始/结束时间自动拼接加班日期（如 `2026-05-29 09:00`），跨天场景结束时间自动加一天。
+导出时开始/结束时间自动拼接日期（如 `2026-05-29 09:00`），跨天场景结束时间自动加一天。
 
 ### 月度时长统计
 
@@ -313,7 +324,7 @@ GET    /api/bot/schedules?token=<TOKEN>&date=YYYY-MM-DD&employee=张三
 | 来源 | 目标 | 方式 |
 |------|------|------|
 | 总览页月历 | 排班表 | `排班表.html?date=2026-05-15&view=day` |
-| 排班表加班标记 | 加班换班 | `加班换班.html?employee=张三`（自动筛选该员工） |
+| 排班表加班标记 | 排班调整 | `排班调整.html?employee=张三`（自动筛选该员工） |
 
 ---
 

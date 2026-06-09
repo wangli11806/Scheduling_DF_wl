@@ -9,3 +9,4 @@
 | 测试数据安全 | [test-data-safety.md](test-data-safety.md) | 测试数据带前缀，测完清理，绝不动生产数据 |
 | 定期审查 | [periodic-review.md](periodic-review.md) | 每7天审查 .claude 文件 |
 | 日志管理 | [log-management.md](log-management.md) | 日志不进 git，推送前检查清理 |
+| 端口冲突排查 | [port-conflict-testing.md](port-conflict-testing.md) | 本地测试前检查端口，多进程冲突导致"改了代码没用" |

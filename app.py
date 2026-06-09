@@ -276,12 +276,13 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS leave_records (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            type           TEXT DEFAULT 'overtime',
             team           TEXT NOT NULL,
             leave_date     TEXT NOT NULL,
             dongfu_id      TEXT DEFAULT '',
             employee_name  TEXT NOT NULL,
-            start_time     TEXT NOT NULL,
-            end_time       TEXT NOT NULL,
+            start_time     TEXT DEFAULT '',
+            end_time       TEXT DEFAULT '',
             hours          REAL DEFAULT 0,
             remark         TEXT DEFAULT '',
             submitter      TEXT DEFAULT '',
@@ -294,6 +295,11 @@ def init_db():
     # 兼容旧表：新增 deduction 列
     try:
         db.execute("ALTER TABLE leave_records ADD COLUMN deduction REAL DEFAULT 0")
+    except:
+        pass
+    # 兼容旧表：新增 type 列
+    try:
+        db.execute("ALTER TABLE leave_records ADD COLUMN type TEXT DEFAULT 'overtime'")
     except:
         pass
     db.executescript("""
@@ -1306,7 +1312,7 @@ def api_assignments_save():
     return jsonify({"ok": True, "updated": count})
 
 
-# ==================== 加班换班 API ====================
+# ==================== 排班调整 API ====================
 
 def _calc_leave_hours(start_time, end_time):
     """计算加班时长（小时），支持跨天"""
@@ -1323,6 +1329,7 @@ def _calc_leave_hours(start_time, end_time):
 def api_leave_records_list():
     team = request.args.get("team", "").strip()
     month = request.args.get("month", "").strip()
+    record_type = request.args.get("type", "").strip()
     db = get_db()
 
     sql = "SELECT * FROM leave_records WHERE 1=1"
@@ -1333,6 +1340,9 @@ def api_leave_records_list():
     if month:
         sql += " AND leave_date LIKE ?"
         params.append(month + "%")
+    if record_type:
+        sql += " AND type = ?"
+        params.append(record_type)
     sql += " ORDER BY id DESC"
     rows = db.execute(sql, params).fetchall()
     return jsonify([dict(r) for r in rows])
@@ -1341,6 +1351,11 @@ def api_leave_records_list():
 @app.route("/api/leave-records", methods=["POST"])
 def api_leave_records_create():
     data = request.json
+    record_type = (data.get("type") or "overtime").strip()
+    if record_type not in ("overtime", "leave", "rest"):
+        return jsonify({"error": "无效的记录类型"}), 400
+    is_leave = record_type == "leave"
+
     team = (data.get("team") or "").strip()
     leave_date = (data.get("leaveDate") or "").strip()
     employee_name = (data.get("employeeName") or "").strip()
@@ -1356,13 +1371,13 @@ def api_leave_records_create():
     if not team:
         return jsonify({"error": "请选择所属团队"}), 400
     if not leave_date:
-        return jsonify({"error": "请选择加班日期"}), 400
+        return jsonify({"error": "请选择日期"}), 400
     if not employee_name:
         return jsonify({"error": "请选择员工"}), 400
-    if not start_time:
-        return jsonify({"error": "请选择加班开始时间"}), 400
-    if not end_time:
-        return jsonify({"error": "请选择加班结束时间"}), 400
+    if not is_leave and not start_time:
+        return jsonify({"error": "请选择开始时间"}), 400
+    if not is_leave and not end_time:
+        return jsonify({"error": "请选择结束时间"}), 400
     if len(remark) > 200:
         return jsonify({"error": "备注不能超过200字符"}), 400
     if deduction < 0 or deduction > 8:
@@ -1372,12 +1387,23 @@ def api_leave_records_create():
     emp = db.execute("SELECT dongfu_id FROM employees WHERE name=?", (employee_name,)).fetchone()
     dongfu_id = emp["dongfu_id"] if emp else ""
 
-    hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
+    if is_leave:
+        hours = 0
+    else:
+        hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
 
     db.execute(
-        "INSERT INTO leave_records(team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction) VALUES(?,?,?,?,?,?,?,?,?,?)",
-        (team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction)
+        "INSERT INTO leave_records(type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        (record_type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction)
     )
+
+    # 请假：同步更新排班表
+    if is_leave:
+        db.execute(
+            "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
+            (leave_date, employee_name, "请假")
+        )
+
     db.commit()
     row = db.execute("SELECT * FROM leave_records WHERE id=last_insert_rowid()").fetchone()
     return jsonify(dict(row)), 201
@@ -1391,6 +1417,12 @@ def api_leave_records_update(record_id):
     if not record:
         return jsonify({"error": "记录不存在"}), 404
 
+    record_type = (data.get("type") or (record["type"] if record["type"] else None) or "overtime").strip()
+    if record_type not in ("overtime", "leave", "rest"):
+        return jsonify({"error": "无效的记录类型"}), 400
+    is_leave = record_type == "leave"
+    was_leave = (record["type"] or "overtime") == "leave"
+
     team = (data.get("team") or "").strip()
     leave_date = (data.get("leaveDate") or "").strip()
     employee_name = (data.get("employeeName") or "").strip()
@@ -1403,7 +1435,9 @@ def api_leave_records_update(record_id):
         deduction = 0
     deduction = float(deduction)
 
-    if not team or not leave_date or not employee_name or not start_time or not end_time:
+    if not team or not leave_date or not employee_name:
+        return jsonify({"error": "必填字段不能为空"}), 400
+    if not is_leave and (not start_time or not end_time):
         return jsonify({"error": "必填字段不能为空"}), 400
     if len(remark) > 200:
         return jsonify({"error": "备注不能超过200字符"}), 400
@@ -1413,12 +1447,34 @@ def api_leave_records_update(record_id):
     emp = db.execute("SELECT dongfu_id FROM employees WHERE name=?", (employee_name,)).fetchone()
     dongfu_id = emp["dongfu_id"] if emp else ""
 
-    hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
+    if is_leave:
+        hours = 0
+    else:
+        hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
 
     db.execute(
-        "UPDATE leave_records SET team=?, leave_date=?, dongfu_id=?, employee_name=?, start_time=?, end_time=?, hours=?, remark=?, submitter=?, deduction=?, updated_at=datetime('now','localtime') WHERE id=?",
-        (team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction, record_id)
+        "UPDATE leave_records SET type=?, team=?, leave_date=?, dongfu_id=?, employee_name=?, start_time=?, end_time=?, hours=?, remark=?, submitter=?, deduction=?, updated_at=datetime('now','localtime') WHERE id=?",
+        (record_type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction, record_id)
     )
+
+    # 请假排班同步：处理类型变化和日期变化
+    old_date = record["leave_date"]
+    old_emp = record["employee_name"]
+    new_date = leave_date
+    new_emp = employee_name
+
+    if was_leave and (not is_leave or old_date != new_date or old_emp != new_emp):
+        # 不再请假 → 删除旧排班
+        db.execute("DELETE FROM schedules WHERE schedule_date=? AND employee_name=? AND shift_name='请假'",
+                   (old_date, old_emp))
+
+    if is_leave:
+        # 新增/更新排班
+        db.execute(
+            "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
+            (new_date, new_emp, "请假")
+        )
+
     db.commit()
     row = db.execute("SELECT * FROM leave_records WHERE id=?", (record_id,)).fetchone()
     return jsonify(dict(row))
@@ -1430,6 +1486,10 @@ def api_leave_records_delete(record_id):
     record = db.execute("SELECT * FROM leave_records WHERE id=?", (record_id,)).fetchone()
     if not record:
         return jsonify({"error": "记录不存在"}), 404
+    # 请假记录删除时同步清除排班
+    if (record["type"] or "overtime") == "leave":
+        db.execute("DELETE FROM schedules WHERE schedule_date=? AND employee_name=? AND shift_name='请假'",
+                   (record["leave_date"], record["employee_name"]))
     db.execute("DELETE FROM leave_records WHERE id=?", (record_id,))
     db.commit()
     return jsonify({"ok": True})
@@ -1461,49 +1521,56 @@ def api_leave_records_export():
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "调休记录"
-    ws.append(["清单ID", "所属团队", "加班日期", "东福工号", "员工", "开始时间", "结束时间", "加班时长(h)", "备注", "提交人", "最后修改时间"])
+    ws.title = "排班调整记录"
+    type_map = {"overtime": "加班", "leave": "请假", "rest": "放休"}
+    ws.append(["清单ID", "类型", "所属团队", "日期", "东福工号", "员工", "开始时间", "结束时间", "时长(h)", "备注", "提交人", "最后修改时间"])
 
     for r in rows:
         leave_date = r["leave_date"]
-        start_time = r["start_time"]
-        end_time = r["end_time"]
+        start_time = r.get("start_time") or ""
+        end_time = r.get("end_time") or ""
+        r_type = r.get("type") or "overtime"
 
-        # 拼接日期+时间；跨天场景 end_date 加一天
-        export_start = f"{leave_date} {start_time}"
-        if _time_to_minutes(end_time) is not None and _time_to_minutes(start_time) is not None:
-            if _time_to_minutes(end_time) <= _time_to_minutes(start_time):
-                from datetime import datetime as dt, timedelta
-                next_day = dt.strptime(leave_date, "%Y-%m-%d") + timedelta(days=1)
-                export_end = f"{next_day.strftime('%Y-%m-%d')} {end_time}"
+        if r_type == "leave":
+            export_start = ""
+            export_end = ""
+        else:
+            export_start = f"{leave_date} {start_time}"
+            if _time_to_minutes(end_time) is not None and _time_to_minutes(start_time) is not None:
+                if _time_to_minutes(end_time) <= _time_to_minutes(start_time):
+                    from datetime import datetime as dt, timedelta
+                    next_day = dt.strptime(leave_date, "%Y-%m-%d") + timedelta(days=1)
+                    export_end = f"{next_day.strftime('%Y-%m-%d')} {end_time}"
+                else:
+                    export_end = f"{leave_date} {end_time}"
             else:
                 export_end = f"{leave_date} {end_time}"
-        else:
-            export_end = f"{leave_date} {end_time}"
 
         ws.append([
-            r["id"], r["team"], r["leave_date"], r["dongfu_id"], r["employee_name"],
+            r["id"], type_map.get(r_type, r_type), r["team"], r["leave_date"],
+            r["dongfu_id"], r["employee_name"],
             export_start, export_end, r["hours"], r["remark"], r["submitter"],
             r["updated_at"] or r["created_at"]
         ])
 
     ws.column_dimensions["A"].width = 10
-    ws.column_dimensions["B"].width = 12
-    ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["B"].width = 10
+    ws.column_dimensions["C"].width = 12
     ws.column_dimensions["D"].width = 14
-    ws.column_dimensions["E"].width = 12
-    ws.column_dimensions["F"].width = 20
+    ws.column_dimensions["E"].width = 14
+    ws.column_dimensions["F"].width = 12
     ws.column_dimensions["G"].width = 20
-    ws.column_dimensions["H"].width = 14
-    ws.column_dimensions["I"].width = 24
-    ws.column_dimensions["J"].width = 12
-    ws.column_dimensions["K"].width = 20
+    ws.column_dimensions["H"].width = 20
+    ws.column_dimensions["I"].width = 14
+    ws.column_dimensions["J"].width = 24
+    ws.column_dimensions["K"].width = 12
+    ws.column_dimensions["L"].width = 20
 
     import tempfile
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
     wb.save(tmp.name)
     tmp.close()
-    return send_file(tmp.name, as_attachment=True, download_name="调休记录导出.xlsx",
+    return send_file(tmp.name, as_attachment=True, download_name="排班调整记录导出.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
