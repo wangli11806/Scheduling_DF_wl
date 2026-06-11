@@ -310,12 +310,22 @@ GET    /api/bot/schedules?token=<TOKEN>&date=YYYY-MM-DD&employee=张三
   "date": "2026-06-05",
   "count": 50,
   "schedules": [
-    {"employee": "张三", "team": "在线组", "shift": "A班", "start_time": "09:00", "end_time": "18:00"}
+    {"employee": "张三", "team": "在线组", "shift": "A班", "start_time": "09:00", "end_time": "18:00",
+     "working": true, "rest_hours": 0.0},
+    {"employee": "李四", "team": "热线组", "shift": "B班", "start_time": "09:00", "end_time": "18:00",
+     "working": false, "rest_hours": 8.0}
   ]
 }
 ```
 
 仅返回在职员工（`status='active'`），已离职/失效的不会出现。
+
+返回字段说明：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| working | bool | 有效上班状态。`班次工作时长 - 放休时长 > 0` 为 true，反之为 false |
+| rest_hours | float | 当日放休总小时数，用于了解不上班的原因
 
 ---
 

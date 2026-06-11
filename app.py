@@ -100,10 +100,20 @@ def api_bot_schedules():
     employee = request.args.get("employee", "").strip()
 
     db = get_db()
+
+    # 查询该日期所有放休记录，汇总每个员工的放休总时长
+    rest_rows = db.execute("""
+        SELECT employee_name, SUM(hours) AS rest_hours
+        FROM leave_records
+        WHERE type='rest' AND leave_date = ?
+        GROUP BY employee_name
+    """, [date_str]).fetchall()
+    rest_map = {r["employee_name"]: r["rest_hours"] or 0 for r in rest_rows}
+
     if employee:
         rows = db.execute("""
             SELECT s.schedule_date, s.employee_name, s.shift_name,
-                   e.team, sh.start_time, sh.end_time
+                   e.team, sh.start_time, sh.end_time, sh.work_hours
             FROM schedules s
             LEFT JOIN employees e ON e.name = s.employee_name
             LEFT JOIN shifts sh ON sh.name = s.shift_name
@@ -112,7 +122,7 @@ def api_bot_schedules():
     else:
         rows = db.execute("""
             SELECT s.schedule_date, s.employee_name, s.shift_name,
-                   e.team, sh.start_time, sh.end_time
+                   e.team, sh.start_time, sh.end_time, sh.work_hours
             FROM schedules s
             LEFT JOIN employees e ON e.name = s.employee_name
             LEFT JOIN shifts sh ON sh.name = s.shift_name
@@ -120,13 +130,20 @@ def api_bot_schedules():
             ORDER BY e.team, s.employee_name
         """, [date_str]).fetchall()
 
-    schedules = [{
-        "employee": r["employee_name"],
-        "team": r["team"] or "",
-        "shift": r["shift_name"],
-        "start_time": r["start_time"] or "",
-        "end_time": r["end_time"] or ""
-    } for r in rows]
+    schedules = []
+    for r in rows:
+        wh = r["work_hours"] or 0
+        rh = rest_map.get(r["employee_name"], 0)
+        working = (wh - rh) > 0
+        schedules.append({
+            "employee": r["employee_name"],
+            "team": r["team"] or "",
+            "shift": r["shift_name"],
+            "start_time": r["start_time"] or "",
+            "end_time": r["end_time"] or "",
+            "working": working,
+            "rest_hours": round(rh, 1)
+        })
 
     return jsonify({
         "ok": True,
