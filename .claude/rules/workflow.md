@@ -74,6 +74,28 @@ description: 任务启动流程——动手改代码之前必须先向用户提�
 scp root@115.29.235.170:/opt/schedule/schedule.db "数据备份/schedule_$(date +%Y-%m-%d).db"
 ```
 
+### 部署执行顺序（重要！）
+
+**必须在重启服务之前解决 schedule.db 冲突，否则服务会读到空/旧数据库。**
+
+```bash
+# 1. 拉代码（stash 会保存生产 DB）
+cd /opt/schedule && git stash && git pull origin main && git stash pop
+
+# 2. 先解决冲突，再重启！
+if [ -f "schedule.db~Stashed changes" ]; then
+    mv "schedule.db~Stashed changes" schedule.db
+    git rm --cached schedule.db 2>/dev/null
+    git reset HEAD schedule.db 2>/dev/null
+    git stash drop 2>/dev/null
+fi
+
+# 3. 确认 DB 存在且非空，然后重启
+ls -la schedule.db && systemctl restart schedule
+```
+
+**为什么**：2026-06-12 部署时 `systemctl restart` 在冲突解决前执行，服务启动时读取空 DB 后创建了空白数据库，用户写入的数据在后续 `mv` 恢复生产 DB 时被覆盖丢失。6/12 和 6/13 共 43 条工作安排数据丢失，从本地备份恢复。
+
 ### 为什么
 
 - `schedule.db` 被错误提交到 git（2026-06-09 的 `f3951a7` 手工保存更改）
