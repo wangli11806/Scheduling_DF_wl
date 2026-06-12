@@ -1,0 +1,23 @@
+#!/bin/bash
+# Pre-commit hook: 阻止 schedule.db 被提交
+# schedule.db 已在 commit 95db905 中从 git 追踪移除
+
+if git diff --cached --name-only | grep -q "schedule.db"; then
+    echo ""
+    echo "  BLOCKED: schedule.db 不能进入版本控制！"
+    echo "  如果你需要备份数据库，请复制到 数据备份/ 目录"
+    echo "  参考: .claude/rules/data-safety.md"
+    echo ""
+    exit 1
+fi
+
+# 同样阻止日志文件
+if git diff --cached --name-only | grep -qE "\.log$|logs/"; then
+    echo ""
+    echo "  BLOCKED: 日志文件不能进入版本控制！"
+    echo "  参考: .claude/rules/log-management.md"
+    echo ""
+    exit 1
+fi
+
+exit 0

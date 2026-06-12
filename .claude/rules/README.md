@@ -11,3 +11,4 @@
 | 日志管理 | [log-management.md](log-management.md) | 日志不进 git，推送前检查清理 |
 | 端口冲突排查 | [port-conflict-testing.md](port-conflict-testing.md) | 本地测试前检查端口，多进程冲突导致"改了代码没用" |
 | Working 状态判断 | [working-judgment.md](working-judgment.md) | 排班数据+调整标签联合判定上班状态，所有涉及时同步 |
+| 数据安全保护 | [data-safety.md](data-safety.md) | 最高优先级，禁止 git restore/checkout schedule.db，部署前自动备份 |

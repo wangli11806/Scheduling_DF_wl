@@ -12,6 +12,7 @@
 - **[test-data-safety](.claude/rules/test-data-safety.md)** — 测试数据带前缀、测完清理、绝不动生产数据
 - **[periodic-review](.claude/rules/periodic-review.md)** — 每7天审查 .claude 文件是否有过时/冗余/冲突
 - **[log-management](.claude/rules/log-management.md)** — 日志不进 git，推送前自动检查清理
+- **[data-safety](.claude/rules/data-safety.md)** — 数据安全最高优先级，禁止 git restore schedule.db，部署前自动备份
 
 ## 常用命令
 
