@@ -166,15 +166,15 @@
         .shift-tag.shift-请假 { background: #fff3e0; color: #bf360c; }
         .shift-tag.shift-none { background: #f5f5f5; color: #bdbdbd; }
 
-        /* 加班标记 */
+        /* 加班标记（红色） */
         .leave-badge {
             position: relative; display: inline-block;
             padding: 2px 7px; border-radius: 4px;
-            background: #ef4444; color: white; font-size: 0.72rem;
+            background: #fee2e2; color: #dc2626; font-size: 0.72rem;
             font-weight: 600; cursor: pointer; margin-left: 4px;
             vertical-align: middle; line-height: 1.4;
         }
-        .leave-badge:hover { background: #dc2626; }
+        .leave-badge:hover { background: #fecaca; }
         .leave-tooltip {
             display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
             transform: translateX(-50%); background: #1e293b; color: white;
@@ -193,11 +193,11 @@
         .rest-badge {
             position: relative; display: inline-block;
             padding: 2px 7px; border-radius: 4px;
-            background: #22c55e; color: white; font-size: 0.72rem;
+            background: #dcfce7; color: #16a34a; font-size: 0.72rem;
             font-weight: 600; cursor: pointer; margin-left: 4px;
             vertical-align: middle; line-height: 1.4;
         }
-        .rest-badge:hover { background: #16a34a; }
+        .rest-badge:hover { background: #bbf7d0; }
         .rest-tooltip {
             display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
             transform: translateX(-50%); background: #1e293b; color: white;
@@ -211,6 +211,27 @@
             border-top-color: #1e293b;
         }
         .rest-badge:hover .rest-tooltip { display: block; }
+
+        /* 换班标记（浅红） */
+        .swap-overtime-badge {
+            background: #ffe4e6; color: #e11d48;
+        }
+        .swap-overtime-badge:hover { background: #fecdd3; }
+        .swap-overtime-badge:hover .leave-tooltip { display: block; }
+
+        /* 换休标记（蓝色） */
+        .swap-rest-badge {
+            background: #dbeafe; color: #2563eb;
+        }
+        .swap-rest-badge:hover { background: #bfdbfe; }
+        .swap-rest-badge:hover .rest-tooltip { display: block; }
+
+        /* 请假标记（黄色） */
+        .leave-all-day-badge {
+            background: #fef3c7; color: #ca8a04;
+        }
+        .leave-all-day-badge:hover { background: #fde68a; }
+        .leave-all-day-badge:hover .rest-tooltip { display: block; }
 
         /* 换班/换休标记 */
         .swap-badge {
@@ -540,14 +561,13 @@
             data.forEach(r => {
                 const key = `${r.leave_date}|${r.employee_name}`;
                 const rtype = r.type || 'overtime';
-                if (rtype === 'rest') {
+                if (rtype === 'rest' || rtype === '换休' || rtype === 'leave') {
                     if (!restMap.has(key)) restMap.set(key, []);
-                    restMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time });
-                } else if (rtype === 'overtime') {
+                    restMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time, type: rtype });
+                } else if (rtype === 'overtime' || rtype === '换班') {
                     if (!leaveMap.has(key)) leaveMap.set(key, []);
-                    leaveMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time });
+                    leaveMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time, type: rtype });
                 }
-                // 请假记录不加入 badge 显示（已反映为 SHF009 班次）
             });
         } catch (e) {
             leaveMap.clear();
@@ -886,25 +906,27 @@
                                 let leaveHtml = '';
                                 if (leaveRecords && leaveRecords.length > 0) {
                                     let totalH = leaveRecords.reduce((s, r) => s + r.hours, 0);
-                                    let tooltipParts = leaveRecords.map(r => `加班${r.hours.toFixed(1)}h（${r.start_time}-${r.end_time}）`);
-                                    leaveHtml = `<span class="leave-badge" data-employee="${emp.name}" title="${tooltipParts.join('; ').replace(/"/g, '&quot;')}">加班<span class="leave-tooltip">${tooltipParts.join('<br>')}</span></span>`;
+                                    let isSwapOvertime = leaveRecords[0].type === '换班';
+                                    let badgeLabel = isSwapOvertime ? '换班' : '加班';
+                                    let badgeClass = isSwapOvertime ? 'leave-badge swap-overtime-badge' : 'leave-badge';
+                                    let tooltipParts = leaveRecords.map(r => `${r.type==='换班'?'换班':'加班'}${r.hours.toFixed(1)}h（${r.start_time}-${r.end_time}）`);
+                                    leaveHtml = `<span class="${badgeClass}" data-employee="${emp.name}" title="${tooltipParts.join('; ').replace(/"/g, '&quot;')}">${badgeLabel}<span class="leave-tooltip">${tooltipParts.join('<br>')}</span></span>`;
                                 }
                                 let restRecords = restMap.get(leaveKey);
                                 let restHtml = '';
                                 if (restRecords && restRecords.length > 0) {
-                                    let tooltipParts = restRecords.map(r => `放休${r.hours.toFixed(1)}h（${r.start_time}-${r.end_time}）`);
-                                    restHtml = `<span class="rest-badge" data-employee="${emp.name}" title="${tooltipParts.join('; ').replace(/"/g, '&quot;')}">放休<span class="rest-tooltip">${tooltipParts.join('<br>')}</span></span>`;
+                                    let rtype0 = restRecords[0].type;
+                                    if (rtype0 === 'leave') {
+                                        restHtml = `<span class="rest-badge leave-all-day-badge" data-employee="${emp.name}" title="全天请假">请假<span class="rest-tooltip">全天请假</span></span>`;
+                                    } else {
+                                        let isSwapRest = rtype0 === '换休';
+                                        let badgeLabel = isSwapRest ? '换休' : '放休';
+                                        let badgeClass = isSwapRest ? 'rest-badge swap-rest-badge' : 'rest-badge';
+                                        let tooltipParts = restRecords.map(r => `${r.type==='换休'?'换休':'放休'}${r.hours.toFixed(1)}h（${r.start_time}-${r.end_time}）`);
+                                        restHtml = `<span class="${badgeClass}" data-employee="${emp.name}" title="${tooltipParts.join('; ').replace(/"/g, '&quot;')}">${badgeLabel}<span class="rest-tooltip">${tooltipParts.join('<br>')}</span></span>`;
+                                    }
                                 }
-                                let swapRecords = swapMap.get(leaveKey);
-                                let swapHtml = '';
-                                if (swapRecords && swapRecords.length > 0) {
-                                    let r = swapRecords[0];
-                                    let label = r.swapType === 'shift_swap' ? '换班' : '换休';
-                                    let cls2 = r.swapType === 'shift_swap' ? 'swap-badge-shift' : 'swap-badge-rest';
-                                    let tips = swapRecords.map(s => `${s.swapType === 'shift_swap' ? '换班' : '换休'}→${s.otherPerson}(${s.otherDate})`).join('<br>');
-                                    swapHtml = `<span class="swap-badge ${cls2}">${label}<span class="swap-tooltip">${tips}</span></span>`;
-                                }
-                                return `<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;"><span class="shift-tag ${cls}" data-shift="${shiftVal}">${shiftVal}</span>${leaveHtml}${restHtml}${swapHtml}</div></td>`;
+                                return `<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;"><span class="shift-tag ${cls}" data-shift="${shiftVal}">${shiftVal}</span>${leaveHtml}${restHtml}</div></td>`;
                             }).join('')}
                         </tr>
                     `).join('')}

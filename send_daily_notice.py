@@ -44,14 +44,43 @@ def query_schedules(target_date):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
+
+    # 1. 从排班表获取工作班次员工（排除休息、放休）
     cur.execute("""
         SELECT e.name, e.team, e.position, s.shift_name
         FROM schedules s JOIN employees e ON s.employee_name = e.name
         WHERE s.schedule_date = ? AND e.status = 'active'
-          AND s.shift_name NOT IN ('休息','放休','请假')
+          AND s.shift_name NOT IN ('休息','放休')
         ORDER BY e.team, s.shift_name, e.name
     """, (target_date,))
-    rows = [dict(r) for r in cur.fetchall()]
+    working = {r['name']: dict(r) for r in cur.fetchall()}
+
+    # 2. 排除当日有换休或请假记录的员工
+    cur.execute("""
+        SELECT DISTINCT employee_name FROM leave_records
+        WHERE type IN ('换休','leave') AND leave_date = ?
+    """, (target_date,))
+    for r in cur.fetchall():
+        working.pop(r['employee_name'], None)
+
+    # 3. 加入当日有换班记录的员工
+    cur.execute("""
+        SELECT lr.employee_name, e.team, e.position
+        FROM leave_records lr
+        LEFT JOIN employees e ON e.name = lr.employee_name AND e.status = 'active'
+        WHERE lr.type = '换班' AND lr.leave_date = ?
+    """, (target_date,))
+    for r in cur.fetchall():
+        name = r['employee_name']
+        if name not in working:
+            working[name] = {
+                'name': name,
+                'team': r['team'] or '',
+                'position': r['position'] or '',
+                'shift_name': '换班'
+            }
+
+    rows = list(working.values())
     conn.close()
     return rows
 

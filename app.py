@@ -101,11 +101,17 @@ def api_bot_schedules():
 
     db = get_db()
 
-    # 查询该日期所有放休记录，汇总每个员工的放休总时长
+    # 查询当日请假人员
+    leave_emps = set(r["employee_name"] for r in db.execute(
+        "SELECT DISTINCT employee_name FROM leave_records WHERE type='leave' AND leave_date=?",
+        [date_str]
+    ).fetchall())
+
+    # 查询该日期所有放休+换休记录，汇总每个员工的放休总时长
     rest_rows = db.execute("""
         SELECT employee_name, SUM(hours) AS rest_hours
         FROM leave_records
-        WHERE type='rest' AND leave_date = ?
+        WHERE type IN ('rest','换休') AND leave_date = ?
         GROUP BY employee_name
     """, [date_str]).fetchall()
     rest_map = {r["employee_name"]: r["rest_hours"] or 0 for r in rest_rows}
@@ -130,11 +136,37 @@ def api_bot_schedules():
             ORDER BY e.team, s.employee_name
         """, [date_str]).fetchall()
 
+    # 查询当日加班/换班记录，汇总每个员工的加班工时
+    overtime_rows = db.execute("""
+        SELECT employee_name, SUM(hours) AS overtime_hours
+        FROM leave_records
+        WHERE type IN ('overtime','换班') AND leave_date = ?
+        GROUP BY employee_name
+    """, [date_str]).fetchall()
+    overtime_map = {r["employee_name"]: r["overtime_hours"] or 0 for r in overtime_rows}
+
+    # 查询当日所有换班记录（换班的人当天实际在上班，用于补充shift信息）
+    swap_in_rows = db.execute("""
+        SELECT lr.employee_name, lr.start_time, lr.end_time, lr.hours, e.team
+        FROM leave_records lr
+        LEFT JOIN employees e ON e.name = lr.employee_name
+        WHERE lr.type IN ('换班','overtime') AND lr.leave_date = ?
+    """, [date_str]).fetchall()
+    swap_in_map = {}
+    for r in swap_in_rows:
+        if r["employee_name"] not in swap_in_map:
+            swap_in_map[r["employee_name"]] = r
+
+    schedule_emps = set()
     schedules = []
     for r in rows:
-        wh = r["work_hours"] or 0
+        schedule_emps.add(r["employee_name"])
+        wh = (r["work_hours"] or 0) + overtime_map.get(r["employee_name"], 0)
         rh = rest_map.get(r["employee_name"], 0)
-        working = (wh - rh) > 0
+        if r["employee_name"] in leave_emps:
+            working = False
+        else:
+            working = (wh - rh) > 0
         schedules.append({
             "employee": r["employee_name"],
             "team": r["team"] or "",
@@ -144,6 +176,21 @@ def api_bot_schedules():
             "working": working,
             "rest_hours": round(rh, 1)
         })
+
+    # 仅有加班/换班记录（原排班表无记录或为休息）的员工也加入上班列表
+    for emp_name, info in swap_in_map.items():
+        if emp_name not in schedule_emps:
+            rh = rest_map.get(emp_name, 0)
+            wh = info["hours"] or 0
+            schedules.append({
+                "employee": emp_name,
+                "team": info["team"] or "",
+                "shift": "加班/换班",
+                "start_time": info["start_time"] or "",
+                "end_time": info["end_time"] or "",
+                "working": (wh - rh) > 0,
+                "rest_hours": round(rh, 1)
+            })
 
     return jsonify({
         "ok": True,
@@ -1353,8 +1400,8 @@ def _validate_rest_hours(db, employee_name, leave_date, new_hours, exclude_id=No
         return  # 无有效班次，不校验
     shift_hours = row["work_hours"]
 
-    # 查询当日已有放休总时长（排除当前编辑的记录）
-    sql = "SELECT COALESCE(SUM(hours),0) FROM leave_records WHERE type='rest' AND leave_date=? AND employee_name=?"
+    # 查询当日已有放休+换休总时长（排除当前编辑的记录）
+    sql = "SELECT COALESCE(SUM(hours),0) FROM leave_records WHERE type IN ('rest','换休') AND leave_date=? AND employee_name=?"
     params = [leave_date, employee_name]
     if exclude_id is not None:
         sql += " AND id != ?"
@@ -1363,7 +1410,7 @@ def _validate_rest_hours(db, employee_name, leave_date, new_hours, exclude_id=No
 
     total_rest = existing_rest + new_hours
     if total_rest > shift_hours:
-        raise ValueError(f"放休时长({total_rest:.1f}h)超出当日班次工作时长({shift_hours:.1f}h)")
+        raise ValueError(f"休息时长({total_rest:.1f}h)超出当日班次工作时长({shift_hours:.1f}h)")
 
 
 @app.route("/api/leave-records", methods=["GET"])
@@ -1393,7 +1440,7 @@ def api_leave_records_list():
 def api_leave_records_create():
     data = request.json
     record_type = (data.get("type") or "overtime").strip()
-    if record_type not in ("overtime", "leave", "rest"):
+    if record_type not in ("overtime", "leave", "rest", "换班", "换休"):
         return jsonify({"error": "无效的记录类型"}), 400
     is_leave = record_type == "leave"
 
@@ -1433,8 +1480,8 @@ def api_leave_records_create():
     else:
         hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
 
-    # 放休时长校验：不能超过班次工作时长
-    if record_type == "rest":
+    # 放休/换休时长校验：总休息时长不能超过班次工作时长
+    if record_type in ("rest", "换休"):
         try:
             _validate_rest_hours(db, employee_name, leave_date, hours, exclude_id=None)
         except ValueError as e:
@@ -1444,14 +1491,6 @@ def api_leave_records_create():
         "INSERT INTO leave_records(type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         (record_type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction)
     )
-
-    # 请假：同步更新排班表
-    if is_leave:
-        db.execute(
-            "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
-            (leave_date, employee_name, "请假")
-        )
-
     db.commit()
     row = db.execute("SELECT * FROM leave_records WHERE id=last_insert_rowid()").fetchone()
     return jsonify(dict(row)), 201
@@ -1466,7 +1505,7 @@ def api_leave_records_update(record_id):
         return jsonify({"error": "记录不存在"}), 404
 
     record_type = (data.get("type") or (record["type"] if record["type"] else None) or "overtime").strip()
-    if record_type not in ("overtime", "leave", "rest"):
+    if record_type not in ("overtime", "leave", "rest", "换班", "换休"):
         return jsonify({"error": "无效的记录类型"}), 400
     is_leave = record_type == "leave"
     was_leave = (record["type"] or "overtime") == "leave"
@@ -1500,8 +1539,8 @@ def api_leave_records_update(record_id):
     else:
         hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
 
-    # 放休时长校验：不能超过班次工作时长
-    if record_type == "rest":
+    # 放休/换休时长校验：总休息时长不能超过班次工作时长
+    if record_type in ("rest", "换休"):
         try:
             _validate_rest_hours(db, employee_name, leave_date, hours, exclude_id=record_id)
         except ValueError as e:
@@ -1511,25 +1550,6 @@ def api_leave_records_update(record_id):
         "UPDATE leave_records SET type=?, team=?, leave_date=?, dongfu_id=?, employee_name=?, start_time=?, end_time=?, hours=?, remark=?, submitter=?, deduction=?, updated_at=datetime('now','localtime') WHERE id=?",
         (record_type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction, record_id)
     )
-
-    # 请假排班同步：处理类型变化和日期变化
-    old_date = record["leave_date"]
-    old_emp = record["employee_name"]
-    new_date = leave_date
-    new_emp = employee_name
-
-    if was_leave and (not is_leave or old_date != new_date or old_emp != new_emp):
-        # 不再请假 → 删除旧排班
-        db.execute("DELETE FROM schedules WHERE schedule_date=? AND employee_name=? AND shift_name='请假'",
-                   (old_date, old_emp))
-
-    if is_leave:
-        # 新增/更新排班
-        db.execute(
-            "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
-            (new_date, new_emp, "请假")
-        )
-
     db.commit()
     row = db.execute("SELECT * FROM leave_records WHERE id=?", (record_id,)).fetchone()
     return jsonify(dict(row))
@@ -1541,10 +1561,6 @@ def api_leave_records_delete(record_id):
     record = db.execute("SELECT * FROM leave_records WHERE id=?", (record_id,)).fetchone()
     if not record:
         return jsonify({"error": "记录不存在"}), 404
-    # 请假记录删除时同步清除排班
-    if (record["type"] or "overtime") == "leave":
-        db.execute("DELETE FROM schedules WHERE schedule_date=? AND employee_name=? AND shift_name='请假'",
-                   (record["leave_date"], record["employee_name"]))
     db.execute("DELETE FROM leave_records WHERE id=?", (record_id,))
     db.commit()
     return jsonify({"ok": True})
@@ -1577,7 +1593,7 @@ def api_leave_records_export():
     wb = Workbook()
     ws = wb.active
     ws.title = "排班调整记录"
-    type_map = {"overtime": "加班", "leave": "请假", "rest": "放休"}
+    type_map = {"overtime": "加班", "leave": "请假", "rest": "放休", "换班": "换班", "换休": "换休"}
     ws.append(["清单ID", "类型", "所属团队", "日期", "东福工号", "员工", "开始时间", "结束时间", "时长(h)", "备注", "提交人", "最后修改时间"])
 
     for r in rows:
@@ -1702,13 +1718,6 @@ def api_swap_records_create():
     emp_a = db.execute("SELECT team FROM employees WHERE name=?", (person_a,)).fetchone()
     team_a = emp_a["team"] if emp_a else ""
 
-    def _upsert_shift(date, emp, shift):
-        db.execute(
-            "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) "
-            "ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
-            (date, emp, shift)
-        )
-
     if person_a == person_b:
         # 自换：同一人两个日期互换
         if not row_a2:
@@ -1717,9 +1726,6 @@ def api_swap_records_create():
         a2_old = row_a2["shift_name"]
         team_b = team_a
 
-        _upsert_shift(date_a, person_a, a2_old)
-        _upsert_shift(date_b, person_a, a1_old)
-
         cur = db.execute(
             "INSERT INTO swap_records(swap_type, person_a, team_a, date_a, shift_a, person_b, team_b, date_b, shift_b, remark, operator) "
             "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
@@ -1727,9 +1733,14 @@ def api_swap_records_create():
         )
         swap_id = cur.lastrowid
 
-        if swap_type == "rest_swap":
-            _create_rest_overtime(db, person_a, team_a, date_a, a1_old, a2_old, person_a, operator, remark)
-            _create_rest_overtime(db, person_a, team_a, date_b, a2_old, a1_old, person_a, operator, remark)
+        # 换班记录：date_b 替自己原 date_a 的班
+        _create_swap_overtime(db, person_a, team_a, date_b, a1_old, person_a, operator, remark)
+        # 换休记录：date_a 原班次不上了
+        _create_swap_rest(db, person_a, team_a, date_a, a1_old, person_a, operator, remark)
+        # 换班记录：date_a 替自己原 date_b 的班
+        _create_swap_overtime(db, person_a, team_a, date_a, a2_old, person_a, operator, remark)
+        # 换休记录：date_b 原班次不上了
+        _create_swap_rest(db, person_a, team_a, date_b, a2_old, person_a, operator, remark)
     else:
         # 互换算两人在两个日期上的班次
         a1_old = row_a1["shift_name"]
@@ -1740,11 +1751,6 @@ def api_swap_records_create():
         emp_b = db.execute("SELECT team FROM employees WHERE name=?", (person_b,)).fetchone()
         team_b = emp_b["team"] if emp_b else ""
 
-        _upsert_shift(date_a, person_a, b1_old)
-        _upsert_shift(date_a, person_b, a1_old)
-        _upsert_shift(date_b, person_a, b2_old)
-        _upsert_shift(date_b, person_b, a2_old)
-
         cur = db.execute(
             "INSERT INTO swap_records(swap_type, person_a, team_a, date_a, shift_a, person_b, team_b, date_b, shift_b, remark, operator) "
             "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
@@ -1752,27 +1758,30 @@ def api_swap_records_create():
         )
         swap_id = cur.lastrowid
 
-        if swap_type == "rest_swap":
-            _create_rest_overtime(db, person_a, team_a, date_a, a1_old, b1_old, person_b, operator)
-            _create_rest_overtime(db, person_a, team_a, date_b, a2_old, b2_old, person_b, operator)
-            _create_rest_overtime(db, person_b, team_b, date_a, b1_old, a1_old, person_a, operator)
-            _create_rest_overtime(db, person_b, team_b, date_b, b2_old, a2_old, person_a, operator)
+        # 换休：各人在自己有工作班次的日期上创建
+        _create_swap_rest(db, person_a, team_a, date_a, a1_old, person_b, operator, remark)
+        _create_swap_rest(db, person_a, team_a, date_b, a2_old, person_b, operator, remark)
+        _create_swap_rest(db, person_b, team_b, date_a, b1_old, person_a, operator, remark)
+        _create_swap_rest(db, person_b, team_b, date_b, b2_old, person_a, operator, remark)
+        # 换班：各人在对方有工作班次的日期上替班
+        _create_swap_overtime(db, person_a, team_a, date_a, b1_old, person_b, operator, remark)
+        _create_swap_overtime(db, person_a, team_a, date_b, b2_old, person_b, operator, remark)
+        _create_swap_overtime(db, person_b, team_b, date_a, a1_old, person_a, operator, remark)
+        _create_swap_overtime(db, person_b, team_b, date_b, a2_old, person_a, operator, remark)
 
     db.commit()
     row = db.execute("SELECT * FROM swap_records WHERE id=?", (swap_id,)).fetchone()
     return jsonify(dict(row)), 201
 
 
-def _create_rest_overtime(db, employee, team, date, old_shift, new_shift, other_person, operator, remark=None):
-    """如果员工原班次是休息、新班次是工作，创建一条加班记录"""
-    if old_shift not in ("休息", "放休", "请假"):
-        return
-    if new_shift in ("休息", "放休", "请假", ""):
+def _create_swap_overtime(db, employee, team, date, shift_name, other_person, operator, remark=None):
+    """创建换班记录（替别人上班），类型=换班"""
+    if shift_name in ("休息", "放休", "请假", ""):
         return
 
     shift = db.execute(
         "SELECT start_time, end_time, work_hours FROM shifts WHERE name=?",
-        (new_shift,)
+        (shift_name,)
     ).fetchone()
     if not shift or not shift["start_time"] or not shift["end_time"]:
         return
@@ -1784,12 +1793,40 @@ def _create_rest_overtime(db, employee, team, date, old_shift, new_shift, other_
     emp = db.execute("SELECT dongfu_id FROM employees WHERE name=?", (employee,)).fetchone()
     dongfu_id = emp["dongfu_id"] if emp else ""
 
-    overtime_remark = remark if remark else f"与{other_person}换班"
+    swap_remark = remark if remark else f"与{other_person}换班"
 
     db.execute(
-        "INSERT INTO leave_records(team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter) "
-        "VALUES(?,?,?,?,?,?,?,?,?)",
-        (team, date, dongfu_id, employee, start_time, end_time, hours, overtime_remark, operator)
+        "INSERT INTO leave_records(type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter) "
+        "VALUES('换班',?,?,?,?,?,?,?,?,?)",
+        (team, date, dongfu_id, employee, start_time, end_time, hours, swap_remark, operator)
+    )
+
+
+def _create_swap_rest(db, employee, team, date, shift_name, other_person, operator, remark=None):
+    """创建换休记录（原班不上，效果=放休），类型=换休"""
+    if shift_name in ("休息", "放休", "请假", ""):
+        return
+
+    shift = db.execute(
+        "SELECT start_time, end_time, work_hours FROM shifts WHERE name=?",
+        (shift_name,)
+    ).fetchone()
+    if not shift or not shift["start_time"] or not shift["end_time"]:
+        return
+
+    start_time = shift["start_time"]
+    end_time = shift["end_time"]
+    hours = shift["work_hours"] if shift["work_hours"] else _calc_leave_hours(start_time, end_time)
+
+    emp = db.execute("SELECT dongfu_id FROM employees WHERE name=?", (employee,)).fetchone()
+    dongfu_id = emp["dongfu_id"] if emp else ""
+
+    rest_remark = remark if remark else f"与{other_person}换班"
+
+    db.execute(
+        "INSERT INTO leave_records(type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter) "
+        "VALUES('换休',?,?,?,?,?,?,?,?,?)",
+        (team, date, dongfu_id, employee, start_time, end_time, hours, rest_remark, operator)
     )
 
 
@@ -2454,7 +2491,7 @@ def build_schedule_message(schedules, target_date, prefix="", suffix=""):
 
 
 def query_schedule_data(target_date):
-    """查询指定日期的排班数据"""
+    """查询指定日期的排班数据（考虑换班/换休）"""
     db = get_db()
     cur = db.execute("""
         SELECT e.name, e.team, e.position, s.shift_name
@@ -2463,7 +2500,34 @@ def query_schedule_data(target_date):
           AND s.shift_name NOT IN ('休息','放休','请假')
         ORDER BY e.team, s.shift_name, e.name
     """, (target_date,))
-    return [dict(r) for r in cur.fetchall()]
+    working = {r['name']: dict(r) for r in cur.fetchall()}
+
+    # 排除当日有换休或请假记录的员工
+    rest_emps = db.execute("""
+        SELECT DISTINCT employee_name FROM leave_records
+        WHERE type IN ('换休','leave') AND leave_date = ?
+    """, [target_date]).fetchall()
+    for r in rest_emps:
+        working.pop(r['employee_name'], None)
+
+    # 加入当日有换班记录的员工（替别人上班）
+    swap_in = db.execute("""
+        SELECT lr.employee_name, e.team, e.position
+        FROM leave_records lr
+        LEFT JOIN employees e ON e.name = lr.employee_name AND e.status = 'active'
+        WHERE lr.type = '换班' AND lr.leave_date = ?
+    """, [target_date]).fetchall()
+    for r in swap_in:
+        name = r['employee_name']
+        if name not in working:
+            working[name] = {
+                'name': name,
+                'team': r['team'] or '',
+                'position': r['position'] or '',
+                'shift_name': '换班'
+            }
+
+    return list(working.values())
 
 
 # ── 配置读写 ──

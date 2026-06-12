@@ -347,13 +347,20 @@ function yesterdayStr() {
 }
 
 let restMap = {};
+let overtimeMap = {};
+let leaveDaySet = new Set();
 let shiftHoursMap = {};
 
 function isEffWorking(shiftName, date, empName) {
+    const key = date + '|' + empName;
+    // 有请假 → 不上班（请假优先）
+    if (leaveDaySet.has(key)) return false;
     const sh = shiftHoursMap[shiftName] || 0;
-    if (sh <= 0) return false;
-    const rh = restMap[date + '|' + empName] || 0;
-    return (sh - rh) > 0;
+    const oh = overtimeMap[key] || 0;
+    const wh = sh + oh;
+    if (wh <= 0) return false;
+    const rh = restMap[key] || 0;
+    return (wh - rh) > 0;
 }
 
 function countWorking(scheduleMap, people, date) {
@@ -679,22 +686,31 @@ async function init() {
         const weekday = "星期" + weekNames[new Date().getDay()];
         document.getElementById("dateTitle").textContent = `【${today} ${weekday}】今日排班`;
 
-        const [employees, todaySchedules, yesterdaySchedules, shifts, restRecords, assignments] = await Promise.all([
+        const [employees, todaySchedules, yesterdaySchedules, shifts, leaveRecords, assignments] = await Promise.all([
             apiGet('/employees?status=active'),
             apiGet('/schedules?start=' + today + '&end=' + today),
             apiGet('/schedules?start=' + yesterday + '&end=' + yesterday),
             apiGet('/shifts'),
-            apiGet('/leave-records?type=rest'),
+            apiGet('/leave-records'),
             apiGet('/assignments?date=' + today)
         ]);
         shiftDataMap = {};
         shifts.forEach(s => { shiftDataMap[s.name] = s; });
 
-        // 放休数据：key=日期|员工名 → 总放休小时
+        // 调整记录：restMap=放休+换休, overtimeMap=加班+换班, leaveDaySet=请假
         restMap = {};
-        restRecords.forEach(r => {
+        overtimeMap = {};
+        leaveDaySet = new Set();
+        leaveRecords.forEach(r => {
             const key = r.leave_date + '|' + r.employee_name;
-            restMap[key] = (restMap[key] || 0) + r.hours;
+            const rt = r.type || 'overtime';
+            if (rt === 'leave') {
+                leaveDaySet.add(key);
+            } else if (rt === 'rest' || rt === '换休') {
+                restMap[key] = (restMap[key] || 0) + r.hours;
+            } else if (rt === 'overtime' || rt === '换班') {
+                overtimeMap[key] = (overtimeMap[key] || 0) + r.hours;
+            }
         });
         // 班次工作时长映射
         shiftHoursMap = {};

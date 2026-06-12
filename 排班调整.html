@@ -214,6 +214,8 @@
                     <option value="overtime">加班</option>
                     <option value="leave">请假</option>
                     <option value="rest">放休</option>
+                    <option value="换班">换班</option>
+                    <option value="换休">换休</option>
                 </select>
             </div>
             <div class="filter-buttons">
@@ -574,9 +576,11 @@
     }
 
     const TYPE_BADGES = {
-        overtime: '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#fef3c7;color:#d97706;">加班</span>',
-        leave: '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#fff3e0;color:#bf360c;">请假</span>',
-        rest: '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#dcfce7;color:#16a34a;">放休</span>'
+        overtime: '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#fee2e2;color:#dc2626;">加班</span>',
+        leave: '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#fef3c7;color:#ca8a04;">请假</span>',
+        rest: '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#dcfce7;color:#16a34a;">放休</span>',
+        '换班': '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#ffe4e6;color:#e11d48;">换班</span>',
+        '换休': '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;background:#dbeafe;color:#2563eb;">换休</span>'
     };
 
     function renderTable() {
@@ -1001,7 +1005,7 @@
     // 删除
     let deleteTargetId = null;
 
-    const DELETE_TYPE_LABELS = { overtime: '加班', leave: '请假', rest: '放休' };
+    const DELETE_TYPE_LABELS = { overtime: '加班', leave: '请假', rest: '放休', '换班': '换班', '换休': '换休' };
 
     function openDeleteModal(recordId) {
         deleteTargetId = recordId;

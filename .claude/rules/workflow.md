@@ -56,3 +56,39 @@ description: 任务启动流程——动手改代码之前必须先向用户提�
 1. 收到回退指令时，先暂停，提醒用户：
    > ⚠️ 回退前请确认：是否需要先备份 `schedule.db`？上次回退忘记备份导致数据丢失。备份方式：复制 `schedule.db` 到安全位置。
 2. 等待用户确认备份完成后，再执行回退操作
+
+## 部署时 schedule.db 冲突处理
+
+**当 ECS 上 `git pull` 因 `schedule.db` 本地修改而冲突时，stash pop 后只用 `git checkout --theirs`，禁止再执行任何 checkout 命令。**
+
+### 部署前备份
+
+**每次部署到 ECS 前，必须先备份云端数据库。**
+
+1. 在项目根目录创建 `数据备份/` 文件夹（如不存在）
+2. 从 ECS 下载 `schedule.db` 到 `数据备份/schedule_YYYY-MM-DD.db`
+3. 备份完成后才继续部署流程
+
+```bash
+# 本地执行
+scp root@115.29.235.170:/opt/schedule/schedule.db "数据备份/schedule_$(date +%Y-%m-%d).db"
+```
+
+### 为什么
+
+- `schedule.db` 被错误提交到 git（2026-06-09 的 `f3951a7` 手工保存更改）
+- ECS 上生产数据库与 git 中的旧快照不同，pull 时产生冲突
+- `git checkout --theirs schedule.db` 取了 stash 中的生产版本 ✓
+- 但紧接着 `git checkout schedule.db` 会用 git 中的旧快照覆盖生产数据 ✗
+- 2026-06-11 部署时因此丢失了用户两天内新加的放休数据（已通过 stash 恢复）
+
+### 正确做法
+
+```bash
+cd /opt/schedule/ && git stash && git pull && git stash pop
+# 如果 stash pop 产生 schedule.db 冲突：
+git checkout --theirs schedule.db   # 保留生产数据
+git restore --staged schedule.db    # 取消暂存
+# 到此为止，不要再执行 git checkout schedule.db
+systemctl restart schedule
+```
