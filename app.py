@@ -2116,7 +2116,7 @@ def api_monthly_hours_stats():
     shift_map = {s["name"]: {"id": s["id"], "work_hours": s["work_hours"]} for s in shifts}
 
     schedules = db.execute(
-        "SELECT employee_name, shift_name FROM schedules WHERE schedule_date >= ? AND schedule_date <= ?",
+        "SELECT employee_name, shift_name FROM raw_schedules WHERE schedule_date >= ? AND schedule_date <= ?",
         (start_date, end_date)
     ).fetchall()
 
@@ -2204,7 +2204,7 @@ def api_monthly_hours_stats_export():
     shift_map = {s["name"]: {"id": s["id"], "work_hours": s["work_hours"]} for s in shifts}
 
     schedules = db.execute(
-        "SELECT employee_name, shift_name FROM schedules WHERE schedule_date >= ? AND schedule_date <= ?",
+        "SELECT employee_name, shift_name FROM raw_schedules WHERE schedule_date >= ? AND schedule_date <= ?",
         (start_date, end_date)
     ).fetchall()
 
