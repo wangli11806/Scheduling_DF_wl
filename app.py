@@ -53,12 +53,15 @@ def check_password(password):
 
 @app.before_request
 def require_auth():
-    if request.path in AUTH_EXEMPT:
+    if any(request.path.startswith(p) for p in AUTH_EXEMPT):
         return None
     if not session.get("logged_in"):
         if request.path.startswith("/api/"):
             return jsonify({"ok": False, "error": "未登录"}), 401
-        return redirect("/login?next=" + request.full_path.lstrip("/"))
+        next_url = request.full_path.lstrip("/")
+        if "://" in next_url or next_url.lstrip("/").startswith("/"):
+            next_url = ""
+        return redirect("/login" + ("?next=" + next_url if next_url else ""))
 
 
 # ==================== 鉴权路由 ====================
@@ -638,11 +641,11 @@ def api_employees_template():
     ws.column_dimensions["G"].width = 14
     ws.column_dimensions["H"].width = 10
 
-    import tempfile
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    wb.save(tmp.name)
-    tmp.close()
-    return send_file(tmp.name, as_attachment=True, download_name="员工导入模板.xlsx",
+    from io import BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, as_attachment=True, download_name="员工导入模板.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
@@ -1046,11 +1049,11 @@ def api_schedules_export():
     ws.column_dimensions["C"].width = 12
     ws.column_dimensions["D"].width = 10
 
-    import tempfile
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    wb.save(tmp.name)
-    tmp.close()
-    return send_file(tmp.name, as_attachment=True, download_name="排班数据.xlsx",
+    from io import BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, as_attachment=True, download_name="排班数据.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
@@ -1317,11 +1320,11 @@ def api_raw_schedules_export():
     ws.column_dimensions["C"].width = 12
     ws.column_dimensions["D"].width = 10
 
-    import tempfile
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    wb.save(tmp.name)
-    tmp.close()
-    return send_file(tmp.name, as_attachment=True, download_name="原始排班数据.xlsx",
+    from io import BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, as_attachment=True, download_name="原始排班数据.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
@@ -1637,11 +1640,11 @@ def api_leave_records_export():
     ws.column_dimensions["K"].width = 12
     ws.column_dimensions["L"].width = 20
 
-    import tempfile
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    wb.save(tmp.name)
-    tmp.close()
-    return send_file(tmp.name, as_attachment=True, download_name="排班调整记录导出.xlsx",
+    from io import BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, as_attachment=True, download_name="排班调整记录导出.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
@@ -1945,8 +1948,11 @@ def api_assignment_stats():
     if not month:
         month = str(now.month)
 
-    year_int = int(year)
-    month_int = int(month)
+    try:
+        year_int = int(year)
+        month_int = int(month)
+    except (ValueError, TypeError):
+        return jsonify({"error": "年份或月份格式无效"}), 400
     last_day = calendar.monthrange(year_int, month_int)[1]
     start_date = f"{year_int}-{month_int:02d}-01"
     end_date = f"{year_int}-{month_int:02d}-{last_day}"
@@ -1984,7 +1990,10 @@ def api_assignment_stats():
         emp = r["employee_name"]
         if emp not in emp_names:
             continue
-        work_types = json.loads(r["work_types"])
+        try:
+            work_types = json.loads(r["work_types"])
+        except (json.JSONDecodeError, TypeError):
+            continue
         for w in work_types:
             if w in stats[emp]:
                 stats[emp][w] += 1
@@ -2015,8 +2024,11 @@ def api_assignment_stats_export():
     if not month:
         month = str(now.month)
 
-    year_int = int(year)
-    month_int = int(month)
+    try:
+        year_int = int(year)
+        month_int = int(month)
+    except (ValueError, TypeError):
+        return jsonify({"error": "年份或月份格式无效"}), 400
     last_day = calendar.monthrange(year_int, month_int)[1]
     start_date = f"{year_int}-{month_int:02d}-01"
     end_date = f"{year_int}-{month_int:02d}-{last_day}"
@@ -2049,7 +2061,10 @@ def api_assignment_stats_export():
         emp = r["employee_name"]
         if emp not in emp_names:
             continue
-        work_types = json.loads(r["work_types"])
+        try:
+            work_types = json.loads(r["work_types"])
+        except (json.JSONDecodeError, TypeError):
+            continue
         for w in work_types:
             if w in stats[emp]:
                 stats[emp][w] += 1
@@ -2067,11 +2082,11 @@ def api_assignment_stats_export():
     for i in range(len(ASSIGNMENT_WORK_TYPES)):
         ws.column_dimensions[get_column_letter(i + 2)].width = 14
 
-    import tempfile
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    wb.save(tmp.name)
-    tmp.close()
-    return send_file(tmp.name, as_attachment=True,
+    from io import BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, as_attachment=True,
                      download_name=f"工作安排统计_{year_int}年{month_int}月.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -2091,8 +2106,11 @@ def api_monthly_hours_stats():
     if not month:
         month = str(now.month)
 
-    year_int = int(year)
-    month_int = int(month)
+    try:
+        year_int = int(year)
+        month_int = int(month)
+    except (ValueError, TypeError):
+        return jsonify({"error": "年份或月份格式无效"}), 400
     last_day = calendar.monthrange(year_int, month_int)[1]
     start_date = f"{year_int}-{month_int:02d}-01"
     end_date = f"{year_int}-{month_int:02d}-{last_day}"
@@ -2137,7 +2155,7 @@ def api_monthly_hours_stats():
         total_days = 0
         for shift_name, days in shifts_count.items():
             info = shift_map.get(shift_name)
-            if info and "SHF001" <= info["id"] <= "SHF006":
+            if info and info["work_hours"] > 0:
                 total_hours += info["work_hours"] * days
                 total_days += days
 
@@ -2179,8 +2197,11 @@ def api_monthly_hours_stats_export():
     if not month:
         month = str(now.month)
 
-    year_int = int(year)
-    month_int = int(month)
+    try:
+        year_int = int(year)
+        month_int = int(month)
+    except (ValueError, TypeError):
+        return jsonify({"error": "年份或月份格式无效"}), 400
     last_day = calendar.monthrange(year_int, month_int)[1]
     start_date = f"{year_int}-{month_int:02d}-01"
     end_date = f"{year_int}-{month_int:02d}-{last_day}"
@@ -2227,7 +2248,7 @@ def api_monthly_hours_stats_export():
         total_days = 0
         for shift_name, days in shifts_count.items():
             info = shift_map.get(shift_name)
-            if info and "SHF001" <= info["id"] <= "SHF006":
+            if info and info["work_hours"] > 0:
                 total_hours += info["work_hours"] * days
                 total_days += days
 
@@ -2285,11 +2306,11 @@ def api_monthly_hours_stats_export():
     ws_sheet.column_dimensions["E"].width = 18
     ws_sheet.column_dimensions["F"].width = 12
 
-    import tempfile
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-    wb.save(tmp.name)
-    tmp.close()
-    return send_file(tmp.name, as_attachment=True,
+    from io import BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, as_attachment=True,
                      download_name=f"月度时长统计_{year_int}年{month_int}月.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
