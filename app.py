@@ -498,10 +498,10 @@ def api_employees_update(emp_id):
     if entry_date: entry_date = entry_date.strip()
     dongfu_id = data.get("dongfuId") if "dongfuId" in data else emp["dongfu_id"]
     if dongfu_id: dongfu_id = dongfu_id.strip()
-    work_hour_system = data.get("workHourSystem") if "workHourSystem" in data else emp.get("work_hour_system", "")
+    work_hour_system = data.get("workHourSystem") if "workHourSystem" in data else (emp["work_hour_system"] or "")
     if work_hour_system: work_hour_system = work_hour_system.strip()
     else: work_hour_system = ""
-    status = (data.get("status") or "").strip() or emp.get("status", "active")
+    status = (data.get("status") or "").strip() or emp["status"] or "active"
 
     if not name:
         return jsonify({"error": "请输入员工姓名"}), 400
@@ -1598,9 +1598,9 @@ def api_leave_records_export():
 
     for r in rows:
         leave_date = r["leave_date"]
-        start_time = r.get("start_time") or ""
-        end_time = r.get("end_time") or ""
-        r_type = r.get("type") or "overtime"
+        start_time = r["start_time"] or ""
+        end_time = r["end_time"] or ""
+        r_type = r["type"] or "overtime"
 
         if r_type == "leave":
             export_start = ""
