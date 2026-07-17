@@ -315,6 +315,16 @@
         .radio-option input:checked + label.休息 { border-color: #9e9e9e; background: #f2f2f2; color: #616161; }
         .radio-option input:checked + label.放休 { border-color: #757575; background: #e0e0e0; color: #424242; }
         .radio-option input:checked + label.请假 { border-color: #bf360c; background: #fff3e0; color: #bf360c; }
+
+        /* 移动端提示条 */
+        .mobile-banner {
+            display: none;
+            background: #eef2ff; border: 1px solid #c7d2fe;
+            border-radius: 12px; padding: 10px 16px; margin-bottom: 12px;
+            text-align: center; font-size: 0.9rem; color: #3730a3; font-weight: 500;
+        }
+        .mobile-banner a { color: #6366f1; font-weight: 700; text-decoration: underline; }
+        @media (max-width: 860px) { .mobile-banner { display: block; } }
     </style>
 </head>
 <body>
@@ -328,6 +338,7 @@
             <div class="nav-item nav-group-toggle" data-page="schedule-group">排班表</div>
             <div class="nav-submenu">
                 <a class="nav-item nav-sub-item active" data-page="schedule" href="排班表.html">排班表</a>
+                <a class="nav-item nav-sub-item" data-page="mobile-schedule" href="排班表_移动端.html">移动端视图</a>
                 <a class="nav-item nav-sub-item" data-page="raw-schedule" href="原始排班.html">原始排班</a>
             </div>
         </div>
@@ -364,6 +375,11 @@
     </div>
 
     <div class="content-body">
+
+        <!-- 移动端提示 -->
+        <div class="mobile-banner">
+            屏幕较窄？试试 <a href="排班表_移动端.html">移动端视图</a>，专为手机优化
+        </div>
 
         <!-- 筛选区域 -->
         <div class="filter-area">
@@ -1328,6 +1344,8 @@
                 } else if(page === 'schedule') {
                     document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
                     item.classList.add('active');
+                } else if(page === 'mobile-schedule') {
+                    window.location.href = '排班表_移动端.html';
                 } else if(page === 'raw-schedule') {
                     window.location.href = '原始排班.html';
                 } else if(page === 'overview') {
