@@ -1475,6 +1475,15 @@ def api_leave_records_create():
         return jsonify({"error": "扣除时长范围0~8小时"}), 400
 
     db = get_db()
+
+    # 同人同日唯一校验
+    existing = db.execute(
+        "SELECT id FROM leave_records WHERE employee_name=? AND leave_date=? LIMIT 1",
+        (employee_name, leave_date)
+    ).fetchone()
+    if existing:
+        return jsonify({"error": "员工当日已有调班，请确认后再提交"}), 400
+
     emp = db.execute("SELECT dongfu_id FROM employees WHERE name=?", (employee_name,)).fetchone()
     dongfu_id = emp["dongfu_id"] if emp else ""
 
@@ -1533,6 +1542,14 @@ def api_leave_records_update(record_id):
         return jsonify({"error": "备注不能超过200字符"}), 400
     if deduction < 0 or deduction > 8:
         return jsonify({"error": "扣除时长范围0~8小时"}), 400
+
+    # 同人同日唯一校验（排除当前记录自身）
+    existing = db.execute(
+        "SELECT id FROM leave_records WHERE employee_name=? AND leave_date=? AND id!=? LIMIT 1",
+        (employee_name, leave_date, record_id)
+    ).fetchone()
+    if existing:
+        return jsonify({"error": "员工当日已有调班，请确认后再提交"}), 400
 
     emp = db.execute("SELECT dongfu_id FROM employees WHERE name=?", (employee_name,)).fetchone()
     dongfu_id = emp["dongfu_id"] if emp else ""
