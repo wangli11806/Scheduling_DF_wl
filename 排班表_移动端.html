@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>排班表</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --text: #1e293b;
+            --sub: #64748b;
+            --muted: #94a3b8;
+            --border: #e8ecf1;
+            --blue: #6366f1;
+            --blue-bg: #eef2ff;
+            --radius: 12px;
+            --pill: 40px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            background: var(--bg); color: var(--text); font-size: 15px;
+            min-height: 100vh; padding-bottom: 40px;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none; user-select: none;
+        }
+
+        /* ===== 顶部栏 ===== */
+        .topbar {
+            position: sticky; top: 0; z-index: 50;
+            background: #fff; padding: 10px 12px;
+            display: flex; align-items: center; gap: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .topbar .arr {
+            width: 38px; height: 38px; border-radius: 50%; border: none;
+            background: #f1f5f9; color: #334155; font-size: 16px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; flex-shrink: 0;
+        }
+        .topbar .arr:active { background: #e2e8f0; }
+        .topbar .date {
+            flex: 1; text-align: center; font-weight: 700; font-size: 16px;
+            letter-spacing: 0.3px;
+        }
+        .topbar .date small { font-weight: 400; color: var(--sub); font-size: 14px; }
+        .topbar .today {
+            padding: 7px 14px; border-radius: 20px; border: 1.5px solid var(--blue);
+            background: #fff; color: var(--blue); font-size: 13px;
+            font-weight: 600; cursor: pointer; flex-shrink: 0;
+        }
+        .topbar .today.on { background: var(--blue-bg); }
+
+        /* ===== 筛选区 ===== */
+        .filters { padding: 8px 12px 4px; }
+        .filters .row {
+            display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+            overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+        }
+        .filters .row::-webkit-scrollbar { display: none; }
+        .filters .row .lbl {
+            font-size: 13px; font-weight: 600; color: var(--sub); flex-shrink: 0;
+            min-width: 30px;
+        }
+
+        /* chip */
+        .chip {
+            display: inline-flex; align-items: center; padding: 5px 12px;
+            border-radius: var(--pill); font-size: 13px; font-weight: 500;
+            border: 1.5px solid #cbd5e1; background: #fff; color: #475569;
+            cursor: pointer; white-space: nowrap; flex-shrink: 0;
+            transition: 0.12s; line-height: 22px;
+        }
+        .chip.on { font-weight: 600; }
+        .chip.all.on { border-color: var(--blue); background: var(--blue-bg); color: #3730a3; }
+
+        /* 团队 chip 颜色 */
+        .chip.team-在线组.on   { border-color:#43a047; background:#e8f5e9; color:#2e7d32; }
+        .chip.team-热线组.on   { border-color:#1e88e5; background:#e3f2fd; color:#1565c0; }
+        .chip.team-售后组.on   { border-color:#ef6c00; background:#fff3e0; color:#e65100; }
+        .chip.team-综合组.on   { border-color:#8e24aa; background:#f3e5f5; color:#6a1b9a; }
+        .chip.team-VIP组.on    { border-color:#d81b60; background:#fce4ec; color:#ad1457; }
+        .chip.team-质检组.on   { border-color:#f9a825; background:#fff8e1; color:#f57f17; }
+        .chip.team-支持组.on   { border-color:#00897b; background:#e0f2f1; color:#00695c; }
+
+        /* 班次 chip 颜色 */
+        .chip.shift-A班.on { border-color:#1565c0; background:#bbdefb; color:#1565c0; }
+        .chip.shift-B班.on { border-color:#00695c; background:#b2dfdb; color:#00695c; }
+        .chip.shift-C班.on { border-color:#7b1fa2; background:#e1bee7; color:#7b1fa2; }
+        .chip.shift-T班.on { border-color:#283593; background:#c5cae9; color:#283593; }
+        .chip.shift-E班.on { border-color:#f57f17; background:#fff9c4; color:#f57f17; }
+        .chip.shift-F班.on { border-color:#ad1457; background:#f8bbd0; color:#ad1457; }
+        .chip.shift-休息.on { border-color:#9e9e9e; background:#f2f2f2; color:#616161; }
+        .chip.shift-放休.on { border-color:#757575; background:#e0e0e0; color:#424242; }
+        .chip.shift-请假.on { border-color:#bf360c; background:#fff3e0; color:#bf360c; }
+
+        /* 状态 chip */
+        .chip.status-all.on  { border-color:var(--blue); background:var(--blue-bg); color:#3730a3; }
+        .chip.status-work.on { border-color:#16a34a; background:#dcfce7; color:#15803d; }
+        .chip.status-rest.on { border-color:#9e9e9e; background:#f2f2f2; color:#616161; }
+
+        /* 搜索 */
+        .sbox { position: relative; margin: 4px 0 0; }
+        .sbox input {
+            width: 100%; height: 38px; padding: 0 36px 0 12px;
+            border-radius: 10px; border: 1.5px solid var(--border);
+            font-size: 14px; background: #fff; outline: none;
+        }
+        .sbox input:focus { border-color: var(--blue); }
+        .sbox .clr {
+            position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+            width: 26px; height: 26px; border-radius: 50%; border: none;
+            background: #e2e8f0; color: #64748b; font-size: 14px;
+            cursor: pointer; display: none; padding: 0; line-height: 26px; text-align: center;
+        }
+        .fcount { font-size: 12px; color: var(--muted); padding: 4px 4px 2px; }
+
+        /* ===== 卡片 ===== */
+        .cards { padding: 8px 10px; }
+        .tgroup { margin-bottom: 14px; }
+        .thead {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 6px 6px; font-size: 14px; font-weight: 700; color: #475569;
+            border-bottom: 2px solid var(--border); margin: 0 4px 6px;
+        }
+        .thead::before {
+            content: ''; width: 4px; height: 16px; border-radius: 2px; flex-shrink: 0;
+        }
+        .tgroup.t-在线组 .thead::before { background: #4caf50; }
+        .tgroup.t-热线组 .thead::before { background: #42a5f5; }
+        .tgroup.t-售后组 .thead::before { background: #ff9800; }
+        .tgroup.t-综合组 .thead::before { background: #ab47bc; }
+        .tgroup.t-VIP组  .thead::before { background: #ec407a; }
+        .tgroup.t-质检组 .thead::before { background: #fdd835; }
+        .tgroup.t-支持组 .thead::before { background: #009688; }
+
+        .card {
+            background: var(--card); border-radius: var(--radius);
+            padding: 12px 14px; margin-bottom: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .card:active { background: #fafbfc; }
+
+        .card .info { flex: 1; min-width: 0; }
+        .card .info .nrow { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+        .card .info .name { font-weight: 700; font-size: 15px; }
+        .card .info .pos {
+            font-size: 11px; padding: 1px 6px; border-radius: 4px;
+            background: #fef3c7; color: #b45309; font-weight: 700;
+        }
+        .card .info .trow { font-size: 13px; color: var(--sub); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+        .card .r { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
+        .card .r .sbadge {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 7px 16px; border-radius: var(--pill);
+            font-size: 14px; font-weight: 700; min-width: 52px;
+        }
+        .card .r .stime { font-size: 11px; color: var(--muted); }
+
+        /* 班次颜色 */
+        .sbadge.s-A班 { background:#bbdefb; color:#1565c0; }
+        .sbadge.s-B班 { background:#b2dfdb; color:#00695c; }
+        .sbadge.s-C班 { background:#e1bee7; color:#7b1fa2; }
+        .sbadge.s-T班 { background:#c5cae9; color:#283593; }
+        .sbadge.s-E班 { background:#fff9c4; color:#f57f17; }
+        .sbadge.s-F班 { background:#f8bbd0; color:#ad1457; }
+        .sbadge.s-休息 { background:#f2f2f2; color:#9e9e9e; }
+        .sbadge.s-放休 { background:#e0e0e0; color:#757575; }
+        .sbadge.s-请假 { background:#fff3e0; color:#bf360c; }
+        .sbadge.s-未排班 { background:#f5f5f5; color:#bdbdbd; }
+
+        /* 标签 */
+        .tag { display:inline-block; padding:2px 7px; border-radius:4px; font-size:11px; font-weight:600; white-space:nowrap; }
+        .tag.ot  { background:#fee2e2; color:#dc2626; }
+        .tag.swp { background:#ffe4e6; color:#e11d48; }
+        .tag.rst { background:#dcfce7; color:#16a34a; }
+        .tag.swr { background:#dbeafe; color:#2563eb; }
+        .tag.lv  { background:#fef3c7; color:#ca8a04; }
+
+        /* 图例 */
+        .legend { margin: 12px 10px; background:#fff; border-radius:var(--radius); overflow:hidden; }
+        .legend .tog {
+            width:100%; padding:11px; background:none; border:none; font-size:14px;
+            font-weight:600; color:var(--blue); cursor:pointer; display:flex;
+            align-items:center; justify-content:center; gap:6px;
+        }
+        .legend .tog:active { background:#f8fafc; }
+        .legend .body { display:none; padding:0 14px 12px; flex-wrap:wrap; gap:6px 14px; }
+        .legend .body.on { display:flex; }
+        .legend .it { display:flex; align-items:center; gap:5px; font-size:13px; color:#475569; }
+        .legend .it .dot { width:11px; height:11px; border-radius:3px; flex-shrink:0; }
+
+        /* 空 */
+        .empty { text-align:center; padding:60px 20px; color:var(--muted); }
+        .empty .ic { font-size:40px; margin-bottom:8px; }
+        .empty .tx { font-size:15px; }
+
+        /* loading */
+        .ld {
+            display:flex; position:fixed; inset:0; background:rgba(240,242,245,0.75);
+            z-index:99; align-items:center; justify-content:center; flex-direction:column; gap:10px;
+        }
+        .ld .sp { width:32px; height:32px; border:3px solid #e2e8f0; border-top-color:var(--blue); border-radius:50%; animation:sp 0.7s linear infinite; }
+        @keyframes sp { to{transform:rotate(360deg);} }
+        .ld .tx { font-size:14px; color:var(--sub); }
+
+        /* toast */
+        .tst {
+            position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:200;
+            background:#1e293b; color:#fff; padding:10px 22px; border-radius:40px;
+            font-size:14px; box-shadow:0 6px 16px rgba(0,0,0,0.2);
+            display:none; pointer-events:none; white-space:nowrap;
+        }
+    </style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="topbar">
+    <button class="arr" id="prevDayBtn">&lt;</button>
+    <div class="date" id="dateLabel">---</div>
+    <button class="arr" id="nextDayBtn">&gt;</button>
+    <button class="today" id="todayBtn">今天</button>
+</div>
+
+<!-- 筛选 -->
+<div class="filters">
+    <div class="row" id="teamRow"><span class="lbl">团队</span></div>
+    <div class="row" id="shiftRow"><span class="lbl">班次</span></div>
+    <div class="sbox">
+        <input type="text" id="searchInput" placeholder="搜索姓名...">
+        <button class="clr" id="searchClear">✕</button>
+    </div>
+    <div class="fcount" id="fcount"></div>
+</div>
+
+<!-- 卡片列表 -->
+<div class="cards" id="cardContainer"></div>
+
+<!-- 图例 -->
+<div class="legend">
+    <button class="tog" id="legendTog">班次图例 ▾</button>
+    <div class="body" id="legendBody"></div>
+</div>
+
+<!-- toast -->
+<div class="tst" id="toast"></div>
+
+<!-- loading -->
+<div class="ld" id="loading">
+    <div class="sp"></div>
+    <div class="tx">加载中...</div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+    // ===== 状态 =====
+    let cur = new Date();
+    let emps = [], shiftMap = {};
+    let sMap = new Map();   // date|name → shift
+    let lMap = new Map();   // date|name → overtime/swap records
+    let rMap = new Map();   // date|name → rest/leave records
+    let selTeams = new Set(), selShifts = new Set(), selStatus = 'work', q = '';
+    const TORD = ['在线组','热线组','售后组','综合组','VIP组','质检组','支持组'];
+
+    // ===== 工具 =====
+    const $ = id => document.getElementById(id);
+    function toast(msg) {
+        const el = $('toast'); el.textContent = msg; el.style.display = 'block';
+        clearTimeout(el._t); el._t = setTimeout(() => el.style.display = 'none', 2000);
+    }
+    function sCls(name) {
+        return name ? 's-' + name : 's-未排班';
+    }
+    function tCls(team) {
+        const m = {'在线组':'t-在线组','热线组':'t-热线组','售后组':'t-售后组','综合组':'t-综合组','VIP组':'t-VIP组','质检组':'t-质检组','支持组':'t-支持组'};
+        return m[team] || '';
+    }
+
+    // ===== 加载 =====
+    async function init() {
+        $('loading').style.display = 'flex';
+        try {
+            const [ed, sd, scd, ld] = await Promise.all([
+                apiGet('/employees?status=active'),
+                apiGet('/shifts'),
+                apiGet('/schedules'),
+                apiGet('/leave-records')
+            ]);
+            emps = ed;
+            shiftMap = {}; sd.forEach(s => shiftMap[s.name] = s);
+            sMap.clear(); scd.forEach(r => sMap.set(r.schedule_date+'|'+r.employee_name, r.shift_name));
+            lMap.clear(); rMap.clear();
+            ld.forEach(r => {
+                const k = r.leave_date+'|'+r.employee_name;
+                const t = r.type || 'overtime';
+                const v = {h:r.hours, st:r.start_time, et:r.end_time, type:t};
+                if (t==='rest'||t==='换休'||t==='leave') {
+                    if(!rMap.has(k)) rMap.set(k,[]); rMap.get(k).push(v);
+                } else {
+                    if(!lMap.has(k)) lMap.set(k,[]); lMap.get(k).push(v);
+                }
+            });
+            // URL date param
+            const p = new URLSearchParams(location.search).get('date');
+            if (p && /^\d{4}-\d{2}-\d{2}$/.test(p)) cur = parseDate(p);
+            buildFilters();
+            render();
+        } catch(e) { toast('加载失败: '+e.message); }
+        finally { $('loading').style.display = 'none'; }
+    }
+
+    // ===== 筛选 =====
+    function buildFilters() {
+        const teams = TORD.filter(t => new Set(emps.map(e=>e.team)).has(t));
+        const shifts = Object.keys(shiftMap);
+
+        // 状态 row
+        const stRow = document.createElement('div');
+        stRow.className = 'row'; stRow.id = 'statusRow';
+        stRow.innerHTML = '<span class="lbl">状态</span>'+
+            '<span class="chip status-all" data-v="all">全部</span>'+
+            '<span class="chip status-work on" data-v="work">上班</span>'+
+            '<span class="chip status-rest" data-v="rest">休息</span>';
+        const filtersEl = document.querySelector('.filters');
+        filtersEl.insertBefore(stRow, filtersEl.firstChild);
+        stRow.onclick = e => {
+            const c = e.target.closest('.chip'); if(!c) return;
+            selStatus = c.dataset.v;
+            stRow.querySelectorAll('.chip').forEach(ch => ch.classList.toggle('on', ch.dataset.v===selStatus));
+            renderCards();
+        };
+
+        // 团队 row
+        const tr = $('teamRow');
+        tr.querySelectorAll('.chip').forEach(c=>c.remove());
+        tr.insertAdjacentHTML('beforeend','<span class="chip all on" data-a="allT">全部</span>');
+        teams.forEach(t => tr.insertAdjacentHTML('beforeend',`<span class="chip team-${t}" data-t="${t}">${t}</span>`));
+
+        // 班次 row
+        const sr = $('shiftRow');
+        sr.querySelectorAll('.chip').forEach(c=>c.remove());
+        sr.insertAdjacentHTML('beforeend','<span class="chip all on" data-a="allS">全部</span>');
+        shifts.forEach(s => sr.insertAdjacentHTML('beforeend',`<span class="chip shift-${s}" data-s="${s}">${s}</span>`));
+
+        // 团队点击
+        tr.onclick = e => {
+            const c = e.target.closest('.chip'); if(!c) return;
+            if(c.dataset.a==='allT') { selTeams.clear(); }
+            else { const t=c.dataset.t; selTeams.has(t) ? selTeams.delete(t) : selTeams.add(t); if(selTeams.size===0||selTeams.size===teams.length) selTeams.clear(); }
+            updChips('t','allT',selTeams);
+            renderCards();
+        };
+        // 班次点击
+        sr.onclick = e => {
+            const c = e.target.closest('.chip'); if(!c) return;
+            if(c.dataset.a==='allS') { selShifts.clear(); }
+            else { const s=c.dataset.s; selShifts.has(s) ? selShifts.delete(s) : selShifts.add(s); if(selShifts.size===0||selShifts.size===shifts.length) selShifts.clear(); }
+            updChips('s','allS',selShifts);
+            renderCards();
+        };
+    }
+
+    function updChips(kind, allKey, set) {
+        document.querySelectorAll(`.chip[data-${kind}]`).forEach(c => {
+            c.classList.toggle('on', set.has(c.dataset[kind]));
+        });
+        const ac = document.querySelector(`.chip.all[data-a="${allKey}"]`);
+        if(ac) ac.classList.toggle('on', set.size===0);
+    }
+
+    // 搜索
+    let st;
+    $('searchInput').oninput = function() {
+        clearTimeout(st);
+        st = setTimeout(() => {
+            q = this.value.trim();
+            $('searchClear').style.display = q ? 'block' : 'none';
+            renderCards();
+        }, 200);
+    };
+    $('searchClear').onclick = function() {
+        $('searchInput').value = ''; q = ''; this.style.display = 'none';
+        renderCards(); $('searchInput').focus();
+    };
+
+    // ===== working 判定 =====
+    function isWorking(emp, ds) {
+        const k = ds+'|'+emp.name;
+        const sn = sMap.get(k) || '未排班';
+        const si = shiftMap[sn];
+        const wh = (si && si.work_hours) ? si.work_hours : 0;
+        const ots = lMap.get(k) || [];
+        const rts = rMap.get(k) || [];
+        const hasLeave = rts.some(r => r.type === 'leave');
+        const hasSwapRest = rts.some(r => r.type === '换休');
+        const hasRest = rts.some(r => r.type === 'rest');
+        const hasOt = ots.length > 0;
+        const totalRh = rts.reduce((s,r) => s + r.h, 0);
+
+        if (wh > 0) {
+            if (hasLeave || hasSwapRest) return false;
+            if (hasRest) return (wh - totalRh) > 0;
+            return true;
+        }
+        return hasOt;
+    }
+
+    // ===== 查询 =====
+    function getList() {
+        const ds = formatDate(cur);
+        let list = [...emps];
+        if(selTeams.size>0) list = list.filter(e=>selTeams.has(e.team));
+        if(q) { const ql=q.toLowerCase(); list = list.filter(e=>e.name.toLowerCase().includes(ql)); }
+        list = list.map(e => {
+            const k = ds+'|'+e.name;
+            return {...e, shift: sMap.get(k)||'未排班', ots:lMap.get(k)||[], rts:rMap.get(k)||[]};
+        });
+        if(selShifts.size>0) list = list.filter(e=>selShifts.has(e.shift));
+        if(selStatus==='work') list = list.filter(e=>isWorking(e,ds));
+        else if(selStatus==='rest') list = list.filter(e=>!isWorking(e,ds));
+        return list;
+    }
+
+    function groupBy(list) {
+        const g = {};
+        list.forEach(e => { const t=e.team||'未分组'; if(!g[t]) g[t]=[]; g[t].push(e); });
+        Object.values(g).forEach(a => a.sort((x,y) => {
+            if(x.position==='主管'&&y.position!=='主管') return -1;
+            if(x.position!=='主管'&&y.position==='主管') return 1;
+            return x.name.localeCompare(y.name,'zh');
+        }));
+        return TORD.filter(t=>g[t]&&g[t].length).map(t=>[t,g[t]]);
+    }
+
+    // ===== 渲染 =====
+    function render() {
+        $('dateLabel').innerHTML = formatDate(cur) + ' <small>星期'+weekDayNames[cur.getDay()]+'</small>';
+        $('todayBtn').classList.toggle('on', formatDate(cur)===formatDate(new Date()));
+        renderCards();
+        renderLegend();
+    }
+
+    function renderCards() {
+        const list = getList();
+        $('fcount').textContent = '已显示 '+list.length+'/'+emps.length+' 人';
+        const ct = $('cardContainer');
+        if(!list.length) {
+            ct.innerHTML = '<div class="empty"><div class="ic">📅</div><div class="tx">'+(q?'无匹配员工':'当天暂无排班数据')+'</div></div>';
+            return;
+        }
+        const groups = groupBy(list);
+        let h = '';
+        groups.forEach(([team, arr]) => {
+            h += '<div class="tgroup '+tCls(team)+'"><div class="thead">'+team+' · '+arr.length+'人</div>';
+            arr.forEach(e => {
+                const info = shiftMap[e.shift];
+                const time = (info&&info.start_time) ? info.start_time+'-'+info.end_time : '';
+                let tags = '';
+                e.ots.forEach(r => {
+                    const lb = r.type==='换班'?'换班':'加班';
+                    tags += '<span class="tag '+(r.type==='换班'?'swp':'ot')+'">'+lb+r.h.toFixed(1)+'h</span>';
+                });
+                e.rts.forEach(r => {
+                    if(r.type==='leave') tags += '<span class="tag lv">请假</span>';
+                    else { const lb = r.type==='换休'?'换休':'放休'; tags += '<span class="tag '+(r.type==='换休'?'swr':'rst')+'">'+lb+r.h.toFixed(1)+'h</span>'; }
+                });
+                const pos = e.position==='主管' ? '<span class="pos">主管</span>' : '';
+                h += '<div class="card">'+
+                    '<div class="info">'+
+                        '<div class="nrow"><span class="name">'+e.name+'</span>'+pos+'</div>'+
+                        '<div class="trow"><span>'+e.team+'</span>'+(tags?'<span>'+tags+'</span>':'')+'</div>'+
+                    '</div>'+
+                    '<div class="r"><span class="sbadge '+sCls(e.shift)+'">'+e.shift+'</span>'+(time?'<span class="stime">'+time+'</span>':'')+'</div>'+
+                '</div>';
+            });
+            h += '</div>';
+        });
+        ct.innerHTML = h;
+    }
+
+    function renderLegend() {
+        const shifts = Object.keys(shiftMap).filter(s=>s!=='休息'&&s!=='请假'&&s!=='放休');
+        const cols = {A班:'#bbdefb',B班:'#b2dfdb',C班:'#e1bee7',T班:'#c5cae9',E班:'#fff9c4',F班:'#f8bbd0'};
+        $('legendBody').innerHTML = shifts.map(s => {
+            const info = shiftMap[s];
+            const time = (info&&info.start_time) ? info.start_time+'-'+info.end_time : '';
+            return '<div class="it"><span class="dot" style="background:'+(cols[s]||'#c8e6c9')+';"></span>'+s+' '+time+'</div>';
+        }).join('');
+    }
+
+    // ===== 导航 =====
+    $('prevDayBtn').onclick = () => { cur.setDate(cur.getDate()-1); render(); };
+    $('nextDayBtn').onclick = () => { cur.setDate(cur.getDate()+1); render(); };
+    $('todayBtn').onclick = () => { cur = new Date(); render(); };
+
+    // 图例
+    $('legendTog').onclick = function() {
+        const b = $('legendBody'); b.classList.toggle('on');
+        this.innerHTML = b.classList.contains('on') ? '班次图例 ▴' : '班次图例 ▾';
+    };
+
+    init();
+</script>
+</body>
+</html>
