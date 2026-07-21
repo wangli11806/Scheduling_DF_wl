@@ -229,6 +229,7 @@
         <h1>月度排班</h1>
         <div class="header-right">
             <span class="finalized-badge" id="finalizedBadge" style="display:none;">已最终保存</span>
+            <button class="btn" onclick="downloadExcel()">下载</button>
             <button class="btn btn-success" id="finalizeBtn" onclick="finalizeMonth()">最终保存</button>
         </div>
     </div>
@@ -509,6 +510,12 @@ async function finalizeMonth() {
     } finally {
         btn.disabled = false; btn.textContent = '最终保存';
     }
+}
+
+// ---- Download ----
+function downloadExcel() {
+    const ym = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+    window.open(`/api/monthly-schedules/export?year_month=${ym}`, '_blank');
 }
 
 // ---- Filter handlers ----

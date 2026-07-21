@@ -1252,6 +1252,123 @@ def api_monthly_schedules_finalize():
     return jsonify({"ok": True, "count": count})
 
 
+@app.route("/api/monthly-schedules/export")
+def api_monthly_schedules_export():
+    """导出月度排班 Excel，表格样式与页面一致"""
+    year_month = request.args.get("year_month", "")
+    try:
+        y, m = year_month.split("-")
+        y, m = int(y), int(m)
+    except ValueError:
+        return jsonify({"ok": False, "error": "参数 year_month 格式错误"}), 400
+
+    import calendar as cal
+    days = cal.monthrange(y, m)[1]
+    start_date = f"{y}-{m:02d}-01"
+    end_date = f"{y}-{m:02d}-{cal.monthrange(y, m)[1]}"
+
+    db = get_db()
+
+    # 读取员工（仅在线组/热线组/售后组，在职）
+    all_emps = db.execute(
+        "SELECT name, team FROM employees WHERE status='active' AND team IN ('在线组','热线组','售后组') ORDER BY team, name"
+    ).fetchall()
+
+    # 读取月度排班数据
+    rows = db.execute(
+        "SELECT schedule_date, employee_name, shift_name FROM monthly_schedules WHERE schedule_date>=? AND schedule_date<=?",
+        (start_date, end_date)
+    ).fetchall()
+    sched_map = {}
+    for r in rows:
+        sched_map[(r["schedule_date"], r["employee_name"])] = r["shift_name"]
+
+    # 读取班次工时
+    shift_rows = db.execute("SELECT name, work_hours FROM shifts").fetchall()
+    shift_hours = {sr["name"]: sr["work_hours"] for sr in shift_rows}
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{y}年{m}月排班"
+
+    # 表头行1：日期
+    headers = ["团队", "姓名"]
+    for d in range(1, days + 1):
+        headers.append(f"{m}/{d}")
+    headers += ["排班工时", "排班天数", "A班天数", "B班天数", "C班天数"]
+    ws.append(headers)
+
+    # 表头行2：星期
+    week_labels = ["日", "一", "二", "三", "四", "五", "六"]
+    week_row = ["", ""]
+    for d in range(1, days + 1):
+        w = cal.weekday(y, m, d)  # 0=Mon...6=Sun
+        week_row.append(week_labels[(w + 1) % 7])
+    week_row += ["", "", "", "", ""]
+    ws.append(week_row)
+
+    # 数据行
+    for emp in all_emps:
+        row_data = [emp["team"], emp["name"]]
+        a_count = b_count = c_count = 0
+        total_hours = 0.0
+        for d in range(1, days + 1):
+            date_str = f"{y}-{m:02d}-{d:02d}"
+            shift = sched_map.get((date_str, emp["name"]), "")
+            row_data.append(shift)
+            if shift == "A班":
+                a_count += 1
+                total_hours += shift_hours.get("A班", 8)
+            elif shift == "B班":
+                b_count += 1
+                total_hours += shift_hours.get("B班", 11)
+            elif shift == "C班":
+                c_count += 1
+                total_hours += shift_hours.get("C班", 8)
+        total_days = a_count + b_count + c_count
+        row_data += [f"{total_hours:.1f}h", f"{total_days}天", f"{a_count}天", f"{b_count}天", f"{c_count}天"]
+        ws.append(row_data)
+
+    # 汇总行
+    summary_labels = ["当日上班人次", "当日A班人数", "当日B班人数", "当日C班人数"]
+    for label in summary_labels:
+        srow = [label, ""]
+        for d in range(1, days + 1):
+            date_str = f"{y}-{m:02d}-{d:02d}"
+            count = 0
+            for emp in all_emps:
+                shift = sched_map.get((date_str, emp["name"]), "")
+                if label == "当日上班人次":
+                    if shift in ("A班", "B班", "C班"):
+                        count += 1
+                elif label == "当日A班人数" and shift == "A班":
+                    count += 1
+                elif label == "当日B班人数" and shift == "B班":
+                    count += 1
+                elif label == "当日C班人数" and shift == "C班":
+                    count += 1
+            srow.append(count if count > 0 else "")
+        srow += ["", "", "", "", ""]
+        ws.append(srow)
+
+    # 设置列宽
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 10
+    for d in range(1, days + 1):
+        ws.column_dimensions[get_column_letter(d + 2)].width = 6
+
+    import io
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"月度排班_{y}年{m}月.xlsx"
+    )
+
+
 # ==================== 原始排班 API ====================
 
 def _sync_raw_to_schedule(db, date_str, emp_name, shift_name):
