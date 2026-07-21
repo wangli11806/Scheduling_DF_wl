@@ -137,6 +137,9 @@
             background: #f9fbfd; font-weight: 700; color: #2c3e66; font-size: 0.75rem;
             padding: 8px 2px; position: sticky; top: 0; z-index: 2;
         }
+        .monthly-table thead th.weekday-row {
+            top: 28px; z-index: 1; font-weight: 400; color: #94a3b8;
+        }
         .monthly-table .col-team { min-width: 64px; }
         .monthly-table .col-name { min-width: 56px; }
         .monthly-table .col-day { min-width: 36px; width: 36px; }
@@ -360,6 +363,7 @@ function renderTable() {
     });
 
     // Build thead
+    const WEEKDAY = ['日','一','二','三','四','五','六'];
     let theadHtml = '<tr>';
     theadHtml += '<th class="col-team">团队</th><th class="col-name">姓名</th>';
     for (let d = 1; d <= days; d++) {
@@ -367,6 +371,15 @@ function renderTable() {
     }
     theadHtml += '<th class="col-stat">排班工时</th><th class="col-stat">排班天数</th>';
     theadHtml += '<th class="col-stat">A班天数</th><th class="col-stat">B班天数</th><th class="col-stat">C班天数</th>';
+    theadHtml += '</tr>';
+    // Weekday row
+    theadHtml += '<tr>';
+    theadHtml += '<th class="col-team weekday-row"></th><th class="col-name weekday-row"></th>';
+    for (let d = 1; d <= days; d++) {
+        let w = new Date(currentYear, currentMonth - 1, d).getDay();
+        theadHtml += `<th class="col-day weekday-row">${WEEKDAY[w]}</th>`;
+    }
+    theadHtml += '<th colspan="5" class="weekday-row"></th>';
     theadHtml += '</tr>';
     document.getElementById('monthlyTableHead').innerHTML = theadHtml;
 
