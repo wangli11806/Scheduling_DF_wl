@@ -365,21 +365,22 @@ function renderTable() {
     // Build thead
     const WEEKDAY = ['日','一','二','三','四','五','六'];
     let theadHtml = '<tr>';
-    theadHtml += '<th class="col-team">团队</th><th class="col-name">姓名</th>';
+    theadHtml += '<th class="col-team" rowspan="2">团队</th><th class="col-name" rowspan="2">姓名</th>';
     for (let d = 1; d <= days; d++) {
         theadHtml += `<th class="col-day">${currentMonth}/${d}</th>`;
     }
-    theadHtml += '<th class="col-stat">排班工时</th><th class="col-stat">排班天数</th>';
-    theadHtml += '<th class="col-stat">A班天数</th><th class="col-stat">B班天数</th><th class="col-stat">C班天数</th>';
+    theadHtml += '<th class="col-stat" rowspan="2">排班工时</th>';
+    theadHtml += '<th class="col-stat" rowspan="2">排班天数</th>';
+    theadHtml += '<th class="col-stat" rowspan="2">A班天数</th>';
+    theadHtml += '<th class="col-stat" rowspan="2">B班天数</th>';
+    theadHtml += '<th class="col-stat" rowspan="2">C班天数</th>';
     theadHtml += '</tr>';
     // Weekday row
     theadHtml += '<tr>';
-    theadHtml += '<th class="col-team weekday-row"></th><th class="col-name weekday-row"></th>';
     for (let d = 1; d <= days; d++) {
         let w = new Date(currentYear, currentMonth - 1, d).getDay();
         theadHtml += `<th class="col-day weekday-row">${WEEKDAY[w]}</th>`;
     }
-    theadHtml += '<th colspan="5" class="weekday-row"></th>';
     theadHtml += '</tr>';
     document.getElementById('monthlyTableHead').innerHTML = theadHtml;
 
