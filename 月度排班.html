@@ -355,11 +355,13 @@ function renderTable() {
         return true;
     });
 
-    // Sort by team order then name
+    // Sort by team → sub_team → name
     filtered.sort((a, b) => {
         let ta = TEAM_ORDER.indexOf(a.team), tb = TEAM_ORDER.indexOf(b.team);
         if (ta === -1) ta = 99; if (tb === -1) tb = 99;
         if (ta !== tb) return ta - tb;
+        let sa = (a.sub_team || ''), sb = (b.sub_team || '');
+        if (sa !== sb) return sa.localeCompare(sb, 'zh');
         return a.name.localeCompare(b.name, 'zh');
     });
 
