@@ -87,22 +87,22 @@
 <aside class="sidebar">
     <div class="sidebar-logo">客服排班系统</div>
     <nav class="sidebar-nav">
-        <a class="nav-item" data-page="overview" href="总览.html">总览</a>
+        <a class="nav-item" data-page="overview" href="/overview">总览</a>
         <div class="nav-group">
             <div class="nav-item nav-group-toggle" data-page="schedule-group">排班表</div>
             <div class="nav-submenu">
-                <a class="nav-item nav-sub-item" data-page="schedule" href="排班表.html">排班表</a>
-                <a class="nav-item nav-sub-item" data-page="raw-schedule" href="原始排班.html">原始排班</a>
+                <a class="nav-item nav-sub-item" data-page="schedule" href="/schedule">排班表</a>
+                <a class="nav-item nav-sub-item" data-page="raw-schedule" href="/raw-schedule">原始排班</a>
             </div>
         </div>
-        <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
-        <a class="nav-item" data-page="leave" href="排班调整.html">排班调整</a>
+        <a class="nav-item" data-page="work" href="/work-arrangement">工作安排</a>
+        <a class="nav-item" data-page="leave" href="/schedule-adjustment">排班调整</a>
         <a class="nav-item active" data-page="employees">员工管理</a>
-        <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>        <div class="nav-group">
+        <a class="nav-item" data-page="shifts" href="/shift">班次设置</a>        <div class="nav-group">
             <div class="nav-item nav-group-toggle" data-page="stats">排班统计</div>
             <div class="nav-submenu">
-                <a class="nav-item nav-sub-item" data-page="monthly-hours" href="月度时长统计.html">月度时长统计</a>
-                <a class="nav-item nav-sub-item" data-page="assignment-stats" href="工作安排统计.html">工作安排统计</a>
+                <a class="nav-item nav-sub-item" data-page="monthly-hours" href="/monthly-hours">月度时长统计</a>
+                <a class="nav-item nav-sub-item" data-page="assignment-stats" href="/work-stats">工作安排统计</a>
             </div>
         </div>
     </nav>
@@ -645,37 +645,37 @@
                 }
                 if(page === 'employees') return;
                 if(page === 'overview') {
-                    window.location.href = '总览.html';
+                    window.location.href = '/overview';
                     return;
                 }
                 if(page === 'raw-schedule') {
-                    window.location.href = '原始排班.html';
+                    window.location.href = '/raw-schedule';
                     return;
                 }
                 if(page === 'schedule') {
-                    window.location.href = '排班表.html';
+                    window.location.href = '/schedule';
                     return;
                 }
                 if(page === 'shifts') {
-                    window.location.href = '班次设置.html';
+                    window.location.href = '/shift';
                     return;
                 }
                 if(page === 'work') {
-                    window.location.href = '工作安排.html';
+                    window.location.href = '/work-arrangement';
                     return;
                 }
                 if(page === 'leave') {
-                    window.location.href = '排班调整.html';
+                    window.location.href = '/schedule-adjustment';
                     return;
                 }
                 if(page === 'notify') {                    return;
                 }
                 if(page === 'monthly-hours') {
-                    window.location.href = '月度时长统计.html';
+                    window.location.href = '/monthly-hours';
                     return;
                 }
                 if(page === 'assignment-stats') {
-                    window.location.href = '工作安排统计.html';
+                    window.location.href = '/work-stats';
                     return;
                 }
                 if(page === 'stats') {

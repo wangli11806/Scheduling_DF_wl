@@ -146,22 +146,22 @@
 <aside class="sidebar">
     <div class="sidebar-logo">客服排班系统</div>
     <nav class="sidebar-nav">
-        <a class="nav-item" data-page="overview" href="总览.html">总览</a>
+        <a class="nav-item" data-page="overview" href="/overview">总览</a>
         <div class="nav-group">
             <div class="nav-item nav-group-toggle" data-page="schedule-group">排班表</div>
             <div class="nav-submenu">
-                <a class="nav-item nav-sub-item" data-page="schedule" href="排班表.html">排班表</a>
-                <a class="nav-item nav-sub-item" data-page="raw-schedule" href="原始排班.html">原始排班</a>
+                <a class="nav-item nav-sub-item" data-page="schedule" href="/schedule">排班表</a>
+                <a class="nav-item nav-sub-item" data-page="raw-schedule" href="/raw-schedule">原始排班</a>
             </div>
         </div>
-        <a class="nav-item" data-page="work" href="工作安排.html">工作安排</a>
+        <a class="nav-item" data-page="work" href="/work-arrangement">工作安排</a>
         <a class="nav-item active" data-page="leave">排班调整</a>
-        <a class="nav-item" data-page="employees" href="员工管理.html">员工管理</a>
-        <a class="nav-item" data-page="shifts" href="班次设置.html">班次设置</a>        <div class="nav-group">
+        <a class="nav-item" data-page="employees" href="/employee">员工管理</a>
+        <a class="nav-item" data-page="shifts" href="/shift">班次设置</a>        <div class="nav-group">
             <div class="nav-item nav-group-toggle" data-page="stats">排班统计</div>
             <div class="nav-submenu">
-                <a class="nav-item nav-sub-item" data-page="monthly-hours" href="月度时长统计.html">月度时长统计</a>
-                <a class="nav-item nav-sub-item" data-page="assignment-stats" href="工作安排统计.html">工作安排统计</a>
+                <a class="nav-item nav-sub-item" data-page="monthly-hours" href="/monthly-hours">月度时长统计</a>
+                <a class="nav-item nav-sub-item" data-page="assignment-stats" href="/work-stats">工作安排统计</a>
             </div>
         </div>
     </nav>
@@ -1436,10 +1436,10 @@
 
         // 侧栏导航
         const PAGE_MAP = {
-            overview: '总览.html', schedule: '排班表.html', 'raw-schedule': '原始排班.html',
-            work: '工作安排.html', employees: '员工管理.html', shifts: '班次设置.html',
-            'monthly-hours': '月度时长统计.html',
-            'assignment-stats': '工作安排统计.html'
+            overview: '/overview', schedule: '/schedule', 'raw-schedule': '/raw-schedule',
+            work: '/work-arrangement', employees: '/employee', shifts: '/shift',
+            'monthly-hours': '/monthly-hours',
+            'assignment-stats': '/work-stats'
         };
         const GROUP_TOGGLES = ['schedule-group', 'stats'];
 

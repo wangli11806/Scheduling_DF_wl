@@ -73,6 +73,60 @@ def login_page():
     return app.send_static_file("login.html")
 
 
+# ==================== 页面英文路由 ====================
+
+@app.route("/overview")
+def overview_page():
+    return app.send_static_file("总览.html")
+
+
+@app.route("/schedule")
+def schedule_page():
+    return app.send_static_file("排班表.html")
+
+
+@app.route("/schedule-mobile")
+def schedule_mobile_page():
+    return app.send_static_file("排班表_移动端.html")
+
+
+@app.route("/raw-schedule")
+def raw_schedule_page():
+    return app.send_static_file("原始排班.html")
+
+
+@app.route("/work-arrangement")
+def work_arrangement_page():
+    return app.send_static_file("工作安排.html")
+
+
+@app.route("/schedule-adjustment")
+def schedule_adjustment_page():
+    return app.send_static_file("排班调整.html")
+
+
+@app.route("/employee")
+def employee_page():
+    return app.send_static_file("员工管理.html")
+
+
+@app.route("/shift")
+def shift_page():
+    return app.send_static_file("班次设置.html")
+
+
+@app.route("/monthly-hours")
+def monthly_hours_page():
+    return app.send_static_file("月度时长统计.html")
+
+
+@app.route("/work-stats")
+def work_stats_page():
+    return app.send_static_file("工作安排统计.html")
+
+
+# ==================== API 路由 ====================
+
 @app.route("/api/auth/login", methods=["POST"])
 def api_auth_login():
     data = request.get_json(silent=True) or {}
