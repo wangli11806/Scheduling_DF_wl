@@ -325,8 +325,8 @@ async function loadData() {
             fetch('/api/shifts').then(r => r.json()),
             fetch(`/api/monthly-schedules?year_month=${ym}`).then(r => r.json())
         ]);
-        employees = empRes.data || [];
-        shifts = shiftRes.data || [];
+        employees = Array.isArray(empRes) ? empRes : (empRes.data || []);
+        shifts = Array.isArray(shiftRes) ? shiftRes : (shiftRes.data || []);
         shiftHours = {};
         shifts.forEach(s => { shiftHours[s.name] = s.work_hours || 0; });
         allTeams = [...new Set(employees.map(e => e.team))].filter(t => t);
