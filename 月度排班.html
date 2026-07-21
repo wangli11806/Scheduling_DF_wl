@@ -343,6 +343,9 @@ async function loadData() {
         document.getElementById('finalizedBadge').style.display = isFinalized ? 'inline' : 'none';
         document.getElementById('finalizeBtn').style.display = isFinalized ? 'none' : 'inline-flex';
         renderTable();
+        // 多选组件数据更新
+        teamMs.updateTrigger();
+        teamMs.renderOptions();
     } catch (e) {
         showToast('加载数据失败');
         console.error(e);
@@ -604,7 +607,7 @@ function initMultiSelect({containerId, triggerId, searchId, selectAllId, options
 }
 
 // ---- Init ----
-initMultiSelect({
+let teamMs = initMultiSelect({
     containerId: 'filterTeam', triggerId: 'filterTeamTrigger',
     searchId: 'filterTeamSearch', selectAllId: 'filterTeamAll',
     optionsId: 'filterTeamOptions',
