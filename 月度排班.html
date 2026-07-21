@@ -236,23 +236,13 @@
                 <div class="month-label" id="monthLabel">加载中...</div>
                 <button id="nextMonthBtn" onclick="changeMonth(1)">▶</button>
             </div>
-            <div class="filter-field">
+            <div class="filter-field" style="width:auto;">
                 <label>团队筛选</label>
-                <div class="multi-select" id="filterTeam">
-                    <div class="multi-select-trigger" id="filterTeamTrigger">
-                        <span class="ms-placeholder">全部团队</span>
-                    </div>
-                    <div class="ms-dropdown">
-                        <div class="ms-search">
-                            <input type="text" placeholder="搜索..." id="filterTeamSearch">
-                            <span class="ms-select-all" id="filterTeamAll">全选</span>
-                        </div>
-                        <div class="ms-options" id="filterTeamOptions"></div>
-                        <div class="ms-actions">
-                            <button class="btn btn-sm" id="filterTeamClear">清除</button>
-                            <button class="btn btn-sm btn-primary" id="filterTeamOk">确定</button>
-                        </div>
-                    </div>
+                <div class="radio-group" id="filterTeam">
+                    <label class="radio-opt"><input type="radio" name="filterTeam" value="" checked> 全部</label>
+                    <label class="radio-opt"><input type="radio" name="filterTeam" value="在线组"> 在线组</label>
+                    <label class="radio-opt"><input type="radio" name="filterTeam" value="热线组"> 热线组</label>
+                    <label class="radio-opt"><input type="radio" name="filterTeam" value="售后组"> 售后组</label>
                 </div>
             </div>
             <div class="filter-field" style="width:auto;">
@@ -287,9 +277,9 @@ let shifts = [];
 let shiftHours = {};  // shift_name → hours
 let scheduleData = {}; // "YYYY-MM-DD|emp_name" → {shift_name, finalized}
 let isFinalized = false;
-let filterTeams = [];
+let filterTeam = '';
 let filterPos = '';
-let allTeams = [];
+const ALLOWED_TEAMS = ['在线组','热线组','售后组'];
 
 // ---- Toast ----
 function showToast(msg) {
@@ -326,11 +316,11 @@ async function loadData() {
             fetch(`/api/monthly-schedules?year_month=${ym}`).then(r => r.json())
         ]);
         employees = Array.isArray(empRes) ? empRes : (empRes.data || []);
+        // 只保留 在线组/热线组/售后组
+        employees = employees.filter(e => ALLOWED_TEAMS.includes(e.team));
         shifts = Array.isArray(shiftRes) ? shiftRes : (shiftRes.data || []);
         shiftHours = {};
         shifts.forEach(s => { shiftHours[s.name] = s.work_hours || 0; });
-        allTeams = [...new Set(employees.map(e => e.team))].filter(t => t);
-        if (filterTeams.length === 0) filterTeams = [...allTeams];
 
         scheduleData = {};
         if (schedRes.ok) {
@@ -343,9 +333,6 @@ async function loadData() {
         document.getElementById('finalizedBadge').style.display = isFinalized ? 'inline' : 'none';
         document.getElementById('finalizeBtn').style.display = isFinalized ? 'none' : 'inline-flex';
         renderTable();
-        // 多选组件数据更新
-        teamMs.updateTrigger();
-        teamMs.renderOptions();
     } catch (e) {
         showToast('加载数据失败');
         console.error(e);
@@ -357,16 +344,9 @@ function renderTable() {
     const days = getDaysInMonth(currentYear, currentMonth);
     document.getElementById('monthLabel').textContent = formatMonthLabel(currentYear, currentMonth);
 
-    // Get active team filter
-    let activeTeams = allTeams;
-    if (filterTeams.length > 0 && filterTeams.length < allTeams.length) {
-        activeTeams = filterTeams;
-    }
-
     // Filter employees
     let filtered = employees.filter(e => {
-        if (e.status && e.status !== '在职' && e.status !== 'active') return false;
-        if (!activeTeams.includes(e.team)) return false;
+        if (filterTeam && e.team !== filterTeam) return false;
         if (filterPos && e.position !== filterPos) return false;
         return true;
     });
@@ -518,105 +498,13 @@ async function finalizeMonth() {
 }
 
 // ---- Filter handlers ----
+document.getElementById('filterTeam').addEventListener('change', function(e) {
+    filterTeam = e.target.value;
+    renderTable();
+});
 document.getElementById('filterPosition').addEventListener('change', function(e) {
     filterPos = e.target.value;
     renderTable();
-});
-
-// ---- Multi-select init ----
-function initMultiSelect({containerId, triggerId, searchId, selectAllId, optionsId, clearId, okId, getOptions, getSelected, setSelected, placeholder, onChange}) {
-    let container = document.getElementById(containerId);
-    let trigger = document.getElementById(triggerId);
-    let searchEl = document.getElementById(searchId);
-    let selectAllEl = document.getElementById(selectAllId);
-    let optionsContainer = document.getElementById(optionsId);
-
-    function renderOptions(filter) {
-        filter = (filter || '').toLowerCase();
-        let all = getOptions();
-        let sel = getSelected();
-        let html = '';
-        all.forEach(opt => {
-            if (filter && !opt.toLowerCase().includes(filter)) return;
-            let checked = sel.includes(opt) ? ' checked' : '';
-            html += `<label class="ms-option"><input type="checkbox" value="${opt}"${checked}> ${opt}</label>`;
-        });
-        optionsContainer.innerHTML = html || '<div style="padding:8px;color:#94a3b8;">无匹配项</div>';
-    }
-
-    function updateTrigger() {
-        let sel = getSelected();
-        if (sel.length === 0) {
-            trigger.innerHTML = `<span class="ms-placeholder">${placeholder}</span>`;
-        } else {
-            trigger.innerHTML = sel.map(s => `<span class="ms-tag">${s}</span>`).join('');
-        }
-    }
-
-    trigger.addEventListener('click', () => {
-        let wasOpen = container.classList.contains('open');
-        document.querySelectorAll('.multi-select.open').forEach(el => { if (el !== container) el.classList.remove('open'); });
-        if (!wasOpen) {
-            container.classList.add('open');
-            renderOptions();
-            searchEl.value = '';
-            searchEl.focus();
-        } else {
-            container.classList.remove('open');
-        }
-    });
-
-    searchEl.addEventListener('input', () => renderOptions(searchEl.value));
-
-    selectAllEl.addEventListener('click', () => {
-        let all = getOptions();
-        let sel = getSelected();
-        if (sel.length === all.length) setSelected([]);
-        else setSelected([...all]);
-        renderOptions();
-        updateTrigger();
-        if (onChange) onChange();
-    });
-
-    document.getElementById(clearId).addEventListener('click', () => {
-        setSelected([]);
-        updateTrigger();
-        renderOptions();
-        if (onChange) onChange();
-    });
-
-    document.getElementById(okId).addEventListener('click', () => {
-        container.classList.remove('open');
-        renderOptions();
-        if (onChange) onChange();
-    });
-
-    optionsContainer.addEventListener('change', () => {
-        let checks = optionsContainer.querySelectorAll('input[type="checkbox"]');
-        let sel = [];
-        checks.forEach(cb => { if (cb.checked) sel.push(cb.value); });
-        setSelected(sel);
-        updateTrigger();
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!container.contains(e.target)) container.classList.remove('open');
-    });
-
-    return { updateTrigger, renderOptions };
-}
-
-// ---- Init ----
-let teamMs = initMultiSelect({
-    containerId: 'filterTeam', triggerId: 'filterTeamTrigger',
-    searchId: 'filterTeamSearch', selectAllId: 'filterTeamAll',
-    optionsId: 'filterTeamOptions',
-    clearId: 'filterTeamClear', okId: 'filterTeamOk',
-    getOptions: () => allTeams,
-    getSelected: () => filterTeams,
-    setSelected: (arr) => { filterTeams = arr; },
-    placeholder: '全部团队',
-    onChange: () => renderTable()
 });
 
 // Sidebar nav click handler
