@@ -162,6 +162,7 @@
             <div class="nav-item nav-group-toggle" data-page="schedule-group">排班表</div>
             <div class="nav-submenu">
                 <a class="nav-item nav-sub-item" data-page="schedule" href="/schedule">排班表</a>
+                <a class="nav-item nav-sub-item" data-page="monthly-schedule" href="/monthly-schedule">月度排班</a>
                 <a class="nav-item nav-sub-item" data-page="raw-schedule" href="/raw-schedule">原始排班</a>
             </div>
         </div>
@@ -451,7 +452,7 @@ async function init() {
             }
             const pageMap = {
                 overview: '/overview',
-                'raw-schedule': '/raw-schedule',
+                'monthly-schedule': '/monthly-schedule', 'raw-schedule': '/raw-schedule',
                 schedule: '/schedule',
                 employees: '/employee',
                 shifts: '/shift',

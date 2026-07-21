@@ -92,6 +92,11 @@ def schedule_mobile_page():
     return app.send_static_file("排班表_移动端.html")
 
 
+@app.route("/monthly-schedule")
+def monthly_schedule_page():
+    return app.send_static_file("月度排班.html")
+
+
 @app.route("/raw-schedule")
 def raw_schedule_page():
     return app.send_static_file("原始排班.html")
@@ -387,6 +392,18 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_raw_schedules_date ON raw_schedules(schedule_date);
         CREATE INDEX IF NOT EXISTS idx_raw_schedules_emp  ON raw_schedules(employee_name);
+
+        CREATE TABLE IF NOT EXISTS monthly_schedules (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            schedule_date  TEXT NOT NULL,
+            employee_name  TEXT NOT NULL,
+            shift_name     TEXT NOT NULL,
+            finalized      INTEGER DEFAULT 0,
+            created_at     TEXT DEFAULT (datetime('now','localtime')),
+            updated_at     TEXT DEFAULT (datetime('now','localtime')),
+            UNIQUE(schedule_date, employee_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_monthly_schedules_date ON monthly_schedules(schedule_date);
 
         CREATE TABLE IF NOT EXISTS daily_assignments (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1115,6 +1132,124 @@ def api_schedules_export():
     output.seek(0)
     return send_file(output, as_attachment=True, download_name="排班数据.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ==================== 月度排班 API ====================
+
+@app.route("/api/monthly-schedules")
+def api_monthly_schedules_list():
+    """查询指定月份的所有月度排班记录"""
+    year_month = request.args.get("year_month", "")
+    try:
+        y, m = year_month.split("-")
+        y, m = int(y), int(m)
+    except ValueError:
+        return jsonify({"ok": False, "error": "参数 year_month 格式错误，需为 YYYY-MM"}), 400
+    start_date = f"{y}-{m:02d}-01"
+    import calendar as cal
+    end_date = f"{y}-{m:02d}-{cal.monthrange(y, m)[1]}"
+
+    db = get_db()
+    rows = db.execute(
+        "SELECT schedule_date, employee_name, shift_name, finalized FROM monthly_schedules WHERE schedule_date>=? AND schedule_date<=? ORDER BY schedule_date, employee_name",
+        (start_date, end_date)
+    ).fetchall()
+    return jsonify({
+        "ok": True,
+        "data": [{"schedule_date": r["schedule_date"], "employee_name": r["employee_name"], "shift_name": r["shift_name"], "finalized": r["finalized"]} for r in rows],
+        "finalized": any(r["finalized"] for r in rows)
+    })
+
+
+@app.route("/api/monthly-schedules", methods=["POST"])
+def api_monthly_schedules_save():
+    """保存单个单元格的班次（shift_name 为空则删除）"""
+    data = request.get_json(silent=True) or {}
+    schedule_date = (data.get("schedule_date") or "").strip()
+    employee_name = (data.get("employee_name") or "").strip()
+    shift_name = (data.get("shift_name") or "").strip()
+    if not schedule_date or not employee_name:
+        return jsonify({"ok": False, "error": "缺少必填字段"}), 400
+
+    db = get_db()
+    # 检查是否已 finalize
+    y, m = schedule_date.split("-")[:2]
+    locked = db.execute(
+        "SELECT COUNT(*) as c FROM monthly_schedules WHERE schedule_date LIKE ? || '%' AND finalized=1",
+        (f"{y}-{m}",)
+    ).fetchone()["c"]
+    if locked:
+        return jsonify({"ok": False, "error": "该月已最终保存，不可修改"}), 403
+
+    if not shift_name:
+        db.execute("DELETE FROM monthly_schedules WHERE schedule_date=? AND employee_name=?",
+                   (schedule_date, employee_name))
+    else:
+        if shift_name not in ("A班", "B班", "C班"):
+            return jsonify({"ok": False, "error": f"不支持的班次: {shift_name}"}), 400
+        db.execute(
+            "INSERT INTO monthly_schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name, updated_at=datetime('now','localtime')",
+            (schedule_date, employee_name, shift_name)
+        )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/monthly-schedules/finalize", methods=["POST"])
+def api_monthly_schedules_finalize():
+    """最终保存：将当月数据导入 raw_schedules 并标记为已 finalize"""
+    data = request.get_json(silent=True) or {}
+    year_month = (data.get("year_month") or "").strip()
+    try:
+        y, m = year_month.split("-")
+        y, m = int(y), int(m)
+    except ValueError:
+        return jsonify({"ok": False, "error": "参数 year_month 格式错误"}), 400
+
+    db = get_db()
+    # 检查是否已 finalize
+    if db.execute("SELECT COUNT(*) as c FROM monthly_schedules WHERE schedule_date LIKE ? AND finalized=1",
+                  (f"{y}-{m:02d}-%",)).fetchone()["c"] > 0:
+        return jsonify({"ok": False, "error": "该月已最终保存，不可重复操作"}), 403
+
+    start_date = f"{y}-{m:02d}-01"
+    import calendar as cal
+    end_date = f"{y}-{m:02d}-{cal.monthrange(y, m)[1]}"
+
+    # 读取当月所有 monthly_schedules 记录
+    rows = db.execute(
+        "SELECT schedule_date, employee_name, shift_name FROM monthly_schedules WHERE schedule_date>=? AND schedule_date<=?",
+        (start_date, end_date)
+    ).fetchall()
+
+    if not rows:
+        return jsonify({"ok": False, "error": "该月无排班数据"}), 400
+
+    # 删除当月已有的 raw_schedules
+    db.execute("DELETE FROM raw_schedules WHERE schedule_date>=? AND schedule_date<=?",
+               (start_date, end_date))
+    # 同步删除对应的 schedules
+    db.execute("DELETE FROM schedules WHERE schedule_date>=? AND schedule_date<=?",
+               (start_date, end_date))
+
+    count = 0
+    for r in rows:
+        db.execute(
+            "INSERT INTO raw_schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
+            (r["schedule_date"], r["employee_name"], r["shift_name"])
+        )
+        # 同步到 schedules
+        db.execute(
+            "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
+            (r["schedule_date"], r["employee_name"], r["shift_name"])
+        )
+        count += 1
+
+    # 标记为 finalized
+    db.execute("UPDATE monthly_schedules SET finalized=1 WHERE schedule_date>=? AND schedule_date<=?",
+               (start_date, end_date))
+    db.commit()
+    return jsonify({"ok": True, "count": count})
 
 
 # ==================== 原始排班 API ====================

@@ -339,6 +339,7 @@
             <div class="nav-submenu">
                 <a class="nav-item nav-sub-item active" data-page="schedule" href="/schedule">排班表</a>
                 <a class="nav-item nav-sub-item" data-page="mobile-schedule" href="/schedule-mobile">移动端视图</a>
+                <a class="nav-item nav-sub-item" data-page="monthly-schedule" href="/monthly-schedule">月度排班</a>
                 <a class="nav-item nav-sub-item" data-page="raw-schedule" href="/raw-schedule">原始排班</a>
             </div>
         </div>
@@ -1346,6 +1347,8 @@
                     item.classList.add('active');
                 } else if(page === 'mobile-schedule') {
                     window.location.href = '/schedule-mobile';
+                } else if(page === 'monthly-schedule') {
+                    window.location.href = '/monthly-schedule';
                 } else if(page === 'raw-schedule') {
                     window.location.href = '/raw-schedule';
                 } else if(page === 'overview') {
