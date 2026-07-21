@@ -45,8 +45,10 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 
-def check_password(password):
+def check_credentials(username, password):
     cfg = load_auth_config()
+    if username != cfg.get("username"):
+        return False
     dk = hashlib.pbkdf2_hmac("sha256", password.encode(), cfg["salt"].encode(), 200000)
     return hmac.compare_digest(dk.hex(), cfg["password_hash"])
 
@@ -130,13 +132,17 @@ def work_stats_page():
 @app.route("/api/auth/login", methods=["POST"])
 def api_auth_login():
     data = request.get_json(silent=True) or {}
-    password = data.get("password") or ""
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
+    if not username:
+        return jsonify({"ok": False, "error": "请输入用户名"})
     if not password:
         return jsonify({"ok": False, "error": "请输入密码"})
-    if not check_password(password):
-        return jsonify({"ok": False, "error": "密码错误"})
+    if not check_credentials(username, password):
+        return jsonify({"ok": False, "error": "用户名或密码错误"})
     session.clear()
     session["logged_in"] = True
+    session["username"] = username
     return jsonify({"ok": True})
 
 

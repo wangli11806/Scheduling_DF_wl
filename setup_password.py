@@ -24,6 +24,10 @@ def setup():
     print("  排班系统 - 登录密码设置")
     print("=" * 40)
 
+    username = input("请输入用户名: ").strip()
+    if not username:
+        print("用户名不能为空！")
+        return
     password = input("请输入新密码: ").strip()
     if not password:
         print("密码不能为空！")
@@ -39,7 +43,8 @@ def setup():
         with open(AUTH_FILE, "r", encoding="utf-8") as f:
             config = json.load(f)
 
-    # 生成密码哈希
+    # 保存用户名和密码哈希
+    config["username"] = username
     pwd_hash, salt = hash_password(password)
     config["password_hash"] = pwd_hash
     config["salt"] = salt

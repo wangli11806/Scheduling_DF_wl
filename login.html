@@ -90,12 +90,16 @@ body {
 <body>
 <div class="login-card">
     <div class="login-title">客服排班系统</div>
-    <div class="login-subtitle">请输入登录密码</div>
+    <div class="login-subtitle">请输入用户名和密码</div>
     <div class="error-msg" id="errorMsg"></div>
     <form id="loginForm">
         <div class="form-group">
+            <label for="username">用户名</label>
+            <input type="text" id="username" autocomplete="username" placeholder="请输入用户名" required autofocus>
+        </div>
+        <div class="form-group">
             <label for="password">密码</label>
-            <input type="password" id="password" autocomplete="current-password" placeholder="请输入密码" required autofocus>
+            <input type="password" id="password" autocomplete="current-password" placeholder="请输入密码" required>
         </div>
         <button type="submit" class="login-btn" id="loginBtn">登 录</button>
     </form>
@@ -118,8 +122,13 @@ form.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideError();
 
+    const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value.trim();
 
+    if (!username) {
+        showError('请输入用户名');
+        return;
+    }
     if (!password) {
         showError('请输入密码');
         return;
@@ -132,7 +141,7 @@ form.addEventListener('submit', async (e) => {
         const resp = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password })
+            body: JSON.stringify({ username, password })
         });
         const data = await resp.json();
         if (data.ok) {
