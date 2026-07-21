@@ -185,6 +185,7 @@
                         <th>东福工号</th>
                         <th>姓名</th>
                         <th>团队</th>
+                        <th>子团队</th>
                         <th>岗位</th>
                         <th>工时制度</th>
                         <th>上级</th>
@@ -225,6 +226,14 @@
                 <option value="VIP组">VIP组</option>
                 <option value="质检组">质检组</option>
                 <option value="支持组">支持组</option>
+            </select>
+        </div>
+        <div class="modal-row" id="subTeamRow" style="display:none;">
+            <label>子团队</label>
+            <select id="modalSubTeam">
+                <option value="">无</option>
+                <option value="实体售后组">实体售后组</option>
+                <option value="本地生活售后组">本地生活售后组</option>
             </select>
         </div>
         <div class="modal-row">
@@ -364,7 +373,7 @@
         document.getElementById("tableInfo").textContent = `共 ${filtered.length} 名员工`;
 
         if(filtered.length === 0) {
-            tbody.innerHTML = `<tr class="empty-row"><td colspan="10">暂无匹配的员工数据</td></tr>`;
+            tbody.innerHTML = `<tr class="empty-row"><td colspan="11">暂无匹配的员工数据</td></tr>`;
             return;
         }
 
@@ -374,6 +383,7 @@
                 <td>${e.dongfu_id || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td style="font-weight:600;">${e.name}</td>
                 <td><span class="team-badge">${e.team}</span></td>
+                <td>${e.sub_team || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td><span class="pos-badge ${e.position==='客服'?'agent':'manager'}">${e.position}</span></td>
                 <td>${e.work_hour_system || '<span style="color:#94a3b8;">-</span>'}</td>
                 <td>${e.supervisor || '<span style="color:#94a3b8;">-</span>'}</td>
@@ -413,6 +423,8 @@
         document.getElementById("modalName").value = '';
         document.getElementById("modalDongfuId").value = '';
         document.getElementById("modalTeam").value = '';
+        document.getElementById("modalSubTeam").value = '';
+        updateSubTeamVisibility();
         document.getElementById("modalPosition").value = '';
         document.getElementById("modalWorkHourSystem").value = '';
         document.getElementById("modalEntryDate").value = '';
@@ -430,6 +442,8 @@
         document.getElementById("modalName").value = emp.name;
         document.getElementById("modalDongfuId").value = emp.dongfu_id || '';
         document.getElementById("modalTeam").value = emp.team;
+        updateSubTeamVisibility();
+        document.getElementById("modalSubTeam").value = emp.sub_team || '';
         document.getElementById("modalPosition").value = emp.position;
         document.getElementById("modalWorkHourSystem").value = emp.work_hour_system || '';
         document.getElementById("modalEntryDate").value = emp.entry_date || '';
@@ -452,6 +466,7 @@
         const workHourSystem = document.getElementById("modalWorkHourSystem").value;
         const supervisor = document.getElementById("modalSupervisor").value;
         const entryDate = document.getElementById("modalEntryDate").value;
+        const subTeam = document.getElementById("modalSubTeam").value;
         const status = document.getElementById("modalStatus").checked ? 'active' : 'inactive';
 
         if(!name) { showToast("请输入员工姓名"); return; }
@@ -459,10 +474,10 @@
         if(!position) { showToast("请选择岗位"); return; }
         try {
             if(editingEmpId) {
-                await apiPut('/employees/' + editingEmpId, { name, dongfuId, team, position, workHourSystem, supervisor, entryDate, status });
+                await apiPut('/employees/' + editingEmpId, { name, dongfuId, team, subTeam, position, workHourSystem, supervisor, entryDate, status });
                 showToast("员工信息已更新");
             } else {
-                await apiPost('/employees', { name, dongfuId, team, position, workHourSystem, supervisor, entryDate, status });
+                await apiPost('/employees', { name, dongfuId, team, subTeam, position, workHourSystem, supervisor, entryDate, status });
                 showToast("员工已创建");
             }
             closeEmployeeModal();
@@ -472,6 +487,20 @@
             showToast(e.message);
         }
     }
+
+    // 子团队：根据所属团队动态显示
+    function updateSubTeamVisibility() {
+        const team = document.getElementById("modalTeam").value;
+        const row = document.getElementById("subTeamRow");
+        const sel = document.getElementById("modalSubTeam");
+        if (team === '售后组') {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+            sel.value = '';
+        }
+    }
+    document.getElementById("modalTeam").addEventListener('change', updateSubTeamVisibility);
 
     // 删除
     let deleteTargetId = null;

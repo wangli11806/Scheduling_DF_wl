@@ -482,6 +482,13 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
+    # 迁移：为已有数据库添加 sub_team 列
+    try:
+        db.execute("ALTER TABLE employees ADD COLUMN sub_team TEXT DEFAULT ''")
+        db.commit()
+    except sqlite3.OperationalError:
+        pass
+
     # 写入默认数据
     cur = db.execute("SELECT COUNT(*) FROM employees")
     if cur.fetchone()[0] == 0:
@@ -534,6 +541,7 @@ def api_employees_create():
     entry_date = (data.get("entryDate") or "").strip()
     dongfu_id = (data.get("dongfuId") or "").strip()
     work_hour_system = (data.get("workHourSystem") or "").strip()
+    sub_team = (data.get("subTeam") or "").strip()
     status = (data.get("status") or "active").strip()
 
     if not name:
@@ -553,8 +561,8 @@ def api_employees_create():
     emp_id = f"EMP{next_id:03d}"
 
     db.execute(
-        "INSERT INTO employees(id, name, team, position, supervisor, entry_date, dongfu_id, work_hour_system, status) VALUES(?,?,?,?,?,?,?,?,?)",
-        (emp_id, name, team, position, supervisor, entry_date, dongfu_id, work_hour_system, status)
+        "INSERT INTO employees(id, name, team, position, supervisor, entry_date, dongfu_id, work_hour_system, sub_team, status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (emp_id, name, team, position, supervisor, entry_date, dongfu_id, work_hour_system, sub_team, status)
     )
     db.commit()
     row = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
@@ -581,6 +589,8 @@ def api_employees_update(emp_id):
     work_hour_system = data.get("workHourSystem") if "workHourSystem" in data else (emp["work_hour_system"] or "")
     if work_hour_system: work_hour_system = work_hour_system.strip()
     else: work_hour_system = ""
+    sub_team = data.get("subTeam") if "subTeam" in data else (emp["sub_team"] or "")
+    if sub_team: sub_team = sub_team.strip()
     status = (data.get("status") or "").strip() or emp["status"] or "active"
 
     if not name:
@@ -592,8 +602,8 @@ def api_employees_update(emp_id):
 
     old_name = emp["name"]
     db.execute(
-        "UPDATE employees SET name=?, team=?, position=?, supervisor=?, entry_date=?, dongfu_id=?, work_hour_system=?, status=?, updated_at=datetime('now','localtime') WHERE id=?",
-        (name, team, position, supervisor or "", entry_date or "", dongfu_id or "", work_hour_system, status, emp_id)
+        "UPDATE employees SET name=?, team=?, position=?, supervisor=?, entry_date=?, dongfu_id=?, work_hour_system=?, sub_team=?, status=?, updated_at=datetime('now','localtime') WHERE id=?",
+        (name, team, position, supervisor or "", entry_date or "", dongfu_id or "", work_hour_system, sub_team or "", status, emp_id)
     )
     # 如果改了名字，同步更新上下级引用和排班记录
     if old_name != name:
