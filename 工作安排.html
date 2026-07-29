@@ -162,12 +162,32 @@
         .work-cell.assigned { background: #fff3e0 !important; color: #e65100; }
         .work-cell.unassigned { background: #f5f5f5 !important; color: #ccc; }
 
-        .meal-select {
-            width: 100%; padding: 4px 2px; border: 1px solid #e2e8f0;
-            border-radius: 6px; font-size: 0.78rem; background: white;
-            color: #1e293b; cursor: pointer; text-align: center;
+        .cascade-select { position: relative; user-select: none; }
+        .cascade-trigger {
+            padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px;
+            font-size: 0.78rem; background: white; color: #1e293b;
+            cursor: pointer; text-align: center; white-space: nowrap; overflow: hidden;
         }
-        .meal-select:focus { border-color: #6366f1; outline: none; }
+        .cascade-trigger:hover { border-color: #94a3b8; }
+        .cascade-select.open .cascade-trigger { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.12); }
+        .cascade-select.disabled .cascade-trigger { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; border-color: #e2e8f0; }
+        .cascade-dropdown {
+            display: none; position: fixed; z-index: 999;
+            background: white; border: 1px solid #e2e8f0; border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1); min-width: 110px; overflow: hidden;
+        }
+        .cascade-select.open .cascade-dropdown { display: block; }
+        .cascade-back {
+            padding: 7px 10px; font-size: 0.82rem; color: #6366f1; cursor: pointer;
+            border-bottom: 1px solid #e2e8f0; font-weight: 600; user-select: none;
+        }
+        .cascade-back:hover { background: #eef2ff; }
+        .cascade-item {
+            padding: 7px 10px; font-size: 0.82rem; cursor: pointer; user-select: none;
+            display: flex; align-items: center; justify-content: space-between; white-space: nowrap;
+        }
+        .cascade-item:hover { background: #f1f5f9; }
+        .cascade-item.selected { background: #eef2ff; color: #3730a3; font-weight: 600; }
 
         .emp-name-cell { font-weight: 600; font-size: 0.85rem; color: #1e293b; }
         .emp-shift-cell { font-size: 0.8rem; font-weight: 500; }
@@ -296,12 +316,102 @@
 <script>
 const API_BASE = '/api';
 const WORK_TYPES = ["热线","在线","工单","反向工单","自主售后","售后单","紧急","本地生活","卡密查询"];
-const LUNCH_SLOTS = ["","11:00-11:30","11:30-12:00","12:00-12:30","12:30-13:00","13:00-13:30","13:30-14:00"];
-const DINNER_SLOTS = ["","17:00-17:30","17:30-18:00","18:00-18:30","18:30-19:00","19:00-19:30","19:30-20:00"];
+function generateMealSlots(rangeStart, rangeEnd, durationMin) {
+    const slots = [""];
+    const [rsH, rsM] = rangeStart.split(":").map(Number);
+    const [reH, reM] = rangeEnd.split(":").map(Number);
+    const startMin = rsH * 60 + rsM;
+    const endMin = reH * 60 + reM;
+    for (let m = startMin; m + durationMin <= endMin; m += 10) {
+        const sH = String(Math.floor(m / 60)).padStart(2, '0');
+        const sM = String(m % 60).padStart(2, '0');
+        const eH = String(Math.floor((m + durationMin) / 60)).padStart(2, '0');
+        const eM = String((m + durationMin) % 60).padStart(2, '0');
+        slots.push(`${sH}:${sM}-${eH}:${eM}`);
+    }
+    return slots;
+}
+
+const SHIFT_MEAL = {
+    'A班': { lunch: 60, dinner: null },
+    'B班': { lunch: 30, dinner: 30 },
+    'C班': { lunch: null, dinner: 60 },
+};
+
+function getMealInfo(shiftName, mealType) {
+    const config = SHIFT_MEAL[shiftName];
+    if (!config || !config[mealType]) return { slots: [""], disabled: true };
+    const rangeStart = mealType === 'lunch' ? '11:00' : '16:00';
+    const rangeEnd = mealType === 'lunch' ? '14:00' : '20:00';
+    return { slots: generateMealSlots(rangeStart, rangeEnd, config[mealType]), disabled: false };
+}
 let restMap = {};
 let overtimeMap = {};
+let overtimeTimeMap = {};  // key → [{start_time, end_time}, ...] 加班/换班时间范围
 let leaveDaySet = new Set();
 let shiftHoursMap = {};
+
+function getCascadeOptions(shiftName, mealType) {
+    const info = getMealInfo(shiftName, mealType);
+    if (info.disabled) return { disabled: true, hours: [], slotsByHour: {} };
+    const allSlots = info.slots.filter(s => s !== '');
+    const slotsByHour = {};
+    for (const slot of allSlots) {
+        const hourKey = slot.substring(0, 2);
+        if (!slotsByHour[hourKey]) slotsByHour[hourKey] = [];
+        slotsByHour[hourKey].push(slot);
+    }
+    const hours = Object.keys(slotsByHour).sort();
+    return { disabled: false, hours, slotsByHour };
+}
+
+function coversMealWindow(startTime, endTime, mealType) {
+    if (!startTime || !endTime) return false;
+    const [sh, sm] = startTime.split(':').map(Number);
+    const [eh, em] = endTime.split(':').map(Number);
+    let ws = sh * 60 + sm;
+    let we = eh * 60 + em;
+    if (we <= ws) we += 24 * 60;
+    const ms = mealType === 'lunch' ? 660 : 1080;  // 11:00 / 18:00
+    const me = mealType === 'lunch' ? 720 : 1140;  // 12:00 / 19:00
+    return ws <= ms && we >= me;
+}
+
+function getEffectiveMealShift(empName, dateStr) {
+    const shift = getShift(dateStr, empName);
+    if (SHIFT_MEAL[shift]) return shift;
+    if (!isEffWorking(shift, dateStr, empName)) return shift;
+    const key = dateStr + '|' + empName;
+    const records = overtimeTimeMap[key];
+    if (!records || records.length === 0) return shift;
+    let hasLunch = false, hasDinner = false;
+    for (const r of records) {
+        if (coversMealWindow(r.start_time, r.end_time, 'lunch')) hasLunch = true;
+        if (coversMealWindow(r.start_time, r.end_time, 'dinner')) hasDinner = true;
+    }
+    if (hasLunch && hasDinner) return 'B班';
+    if (hasLunch) return 'A班';
+    if (hasDinner) return 'C班';
+    return shift;
+}
+
+function renderMealCell(empName, shiftName, mealType, currentValue) {
+    const cascade = getCascadeOptions(shiftName, mealType);
+    if (cascade.disabled && currentValue) {
+        if (assignmentMap[empName]) {
+            assignmentMap[empName][mealType === 'lunch' ? 'lunch_slot' : 'dinner_slot'] = '';
+        }
+    }
+    const mealClass = mealType === 'lunch' ? 'lunch' : 'dinner';
+    const disabledClass = cascade.disabled ? ' disabled' : '';
+    const displayText = cascade.disabled ? '-' : (currentValue || '-');
+    return `<td class="col-meal">
+        <div class="cascade-select${disabledClass}" data-emp="${empName}" data-meal="${mealClass}" data-shift="${shiftName}" data-value="${currentValue || ''}">
+            <div class="cascade-trigger">${displayText}</div>
+            <div class="cascade-dropdown"><div class="cascade-list"></div></div>
+        </div>
+    </td>`;
+}
 
 function isEffWorking(shiftName, dateStr, empName) {
     const key = dateStr + '|' + empName;
@@ -368,6 +478,7 @@ async function loadData() {
 
     restMap = {};
     overtimeMap = {};
+    overtimeTimeMap = {};
     leaveDaySet = new Set();
     leaveRecords.forEach(r => {
         const key = r.leave_date + '|' + r.employee_name;
@@ -378,6 +489,8 @@ async function loadData() {
             restMap[key] = (restMap[key] || 0) + r.hours;
         } else if (rt === 'overtime' || rt === '换班') {
             overtimeMap[key] = (overtimeMap[key] || 0) + r.hours;
+            if (!overtimeTimeMap[key]) overtimeTimeMap[key] = [];
+            overtimeTimeMap[key].push({ start_time: r.start_time, end_time: r.end_time });
         }
     });
     shiftHoursMap = {};
@@ -475,6 +588,7 @@ function renderTable() {
             const assign = assignmentMap[e.name] || { work_types: [], lunch_slot: '', dinner_slot: '' };
             const myWorks = new Set(assign.work_types || []);
             const shift = getShift(dateStr, e.name);
+            const mealShift = getEffectiveMealShift(e.name, dateStr);
             return `
                 <tr data-emp="${e.name}">
                     <td class="col-team team-bg-${e.team}" style="font-size:0.82rem;color:#475569;font-weight:600;">${e.team}</td>
@@ -484,16 +598,8 @@ function renderTable() {
                         const assigned = myWorks.has(w);
                         return `<td class="col-work work-cell ${assigned ? 'assigned' : 'unassigned'}" data-work="${w}">${assigned ? '1' : ''}</td>`;
                     }).join('')}
-                    <td class="col-meal">
-                        <select class="meal-select lunch-select" data-emp="${e.name}">
-                            ${LUNCH_SLOTS.map(s => `<option value="${s}" ${assign.lunch_slot === s ? 'selected' : ''}>${s || '-'}</option>`).join('')}
-                        </select>
-                    </td>
-                    <td class="col-meal">
-                        <select class="meal-select dinner-select" data-emp="${e.name}">
-                            ${DINNER_SLOTS.map(s => `<option value="${s}" ${assign.dinner_slot === s ? 'selected' : ''}>${s || '-'}</option>`).join('')}
-                        </select>
-                    </td>
+                    ${renderMealCell(e.name, mealShift, 'lunch', assign.lunch_slot)}
+                    ${renderMealCell(e.name, mealShift, 'dinner', assign.dinner_slot)}
                 </tr>`;
         })
     ].join('');
@@ -530,27 +636,100 @@ function renderTable() {
         });
     });
 
-    // 用餐下拉变更：同步到 assignmentMap
-    document.querySelectorAll('.lunch-select').forEach(sel => {
-        sel.addEventListener('change', () => {
-            const empName = sel.getAttribute('data-emp');
-            if (!assignmentMap[empName]) {
-                assignmentMap[empName] = { work_types: [], lunch_slot: '', dinner_slot: '' };
+    // 级联下拉事件代理（绑定在 tbody 上）
+    const tbody = document.getElementById('assignTableBody');
+    if (!tbody._cascadeBound) {
+        tbody._cascadeBound = true;
+        tbody.addEventListener('click', function(e) {
+            const trigger = e.target.closest('.cascade-trigger');
+            const item = e.target.closest('.cascade-item');
+            const back = e.target.closest('.cascade-back');
+
+            if (trigger) {
+                const cs = trigger.closest('.cascade-select');
+                if (cs.classList.contains('disabled')) return;
+                const isOpen = cs.classList.contains('open');
+                // 关闭其他所有级联
+                document.querySelectorAll('.cascade-select.open').forEach(c => c.classList.remove('open'));
+                if (!isOpen) {
+                    cs.classList.add('open');
+                    buildCascadeLevel(cs, 'hour');
+                    positionCascadeDropdown(cs);
+                }
+                return;
             }
-            assignmentMap[empName].lunch_slot = sel.value;
-            saveData();
-        });
-    });
-    document.querySelectorAll('.dinner-select').forEach(sel => {
-        sel.addEventListener('change', () => {
-            const empName = sel.getAttribute('data-emp');
-            if (!assignmentMap[empName]) {
-                assignmentMap[empName] = { work_types: [], lunch_slot: '', dinner_slot: '' };
+
+            if (item) {
+                const cs = item.closest('.cascade-select');
+                const level = item.dataset.level;
+                const value = item.dataset.value;
+                if (level === 'hour') {
+                    buildCascadeLevel(cs, 'slot', value);
+                } else {
+                    selectCascadeSlot(cs, value);
+                }
+                return;
             }
-            assignmentMap[empName].dinner_slot = sel.value;
-            saveData();
+
+            if (back) {
+                const cs = back.closest('.cascade-select');
+                buildCascadeLevel(cs, 'hour');
+                return;
+            }
+
+            // 点击级联下拉外部关闭
+            if (!e.target.closest('.cascade-select')) {
+                document.querySelectorAll('.cascade-select.open').forEach(c => c.classList.remove('open'));
+            }
         });
-    });
+    }
+}
+
+function buildCascadeLevel(cs, level, hour) {
+    const shiftName = cs.dataset.shift;
+    const mealType = cs.dataset.meal;
+    const cascade = getCascadeOptions(shiftName, mealType);
+    const list = cs.querySelector('.cascade-list');
+    const currentValue = cs.dataset.value;
+
+    if (level === 'hour') {
+        list.innerHTML = cascade.hours.map(h =>
+            `<div class="cascade-item" data-level="hour" data-value="${h}">${h}时 <span style="color:#94a3b8;font-size:0.75rem;">▸</span></div>`
+        ).join('');
+    } else {
+        const slots = cascade.slotsByHour[hour] || [];
+        list.innerHTML =
+            `<div class="cascade-back">← ${hour}时</div>` +
+            slots.map(s => {
+                const sel = s === currentValue ? ' selected' : '';
+                return `<div class="cascade-item${sel}" data-level="slot" data-value="${s}">${s}</div>`;
+            }).join('');
+    }
+}
+
+function positionCascadeDropdown(cs) {
+    const trigger = cs.querySelector('.cascade-trigger');
+    const dropdown = cs.querySelector('.cascade-dropdown');
+    const rect = trigger.getBoundingClientRect();
+    const h = Math.min(dropdown.scrollHeight || 200, 260);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    dropdown.style.top = (spaceBelow < h && rect.top > spaceBelow ? Math.max(0, rect.top - h - 4) : rect.bottom + 4) + 'px';
+    dropdown.style.left = Math.min(rect.left, window.innerWidth - 140) + 'px';
+}
+
+function selectCascadeSlot(cs, value) {
+    const empName = cs.dataset.emp;
+    const mealType = cs.dataset.meal;
+    if (!assignmentMap[empName]) {
+        assignmentMap[empName] = { work_types: [], lunch_slot: '', dinner_slot: '' };
+    }
+    const slotKey = mealType === 'lunch' ? 'lunch_slot' : 'dinner_slot';
+    assignmentMap[empName][slotKey] = value;
+    cs.dataset.value = value;
+    cs.querySelector('.cascade-trigger').textContent = value;
+    cs.classList.remove('open');
+    updateSummaryRow();
+    saveData();
 }
 
 function updateSummaryRow() {
