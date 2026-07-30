@@ -200,6 +200,11 @@
         }
         .meal-table tbody tr:hover td { background: #eef2ff; }
         .meal-table .meal-empty { color: #cbd5e1; }
+        .meal-hour-row td {
+            background: #f1f5f9 !important; font-weight: 700;
+            color: #334155; font-size: 0.85rem; padding: 8px 12px;
+            text-align: left; border-bottom: 2px solid #dde4ed;
+        }
 
         /* 售后组工作安排 */
         #assignAfterSalesTable { width: 100%; min-width: auto; table-layout: fixed; border-collapse: collapse; font-size: 0.8rem; }
@@ -701,41 +706,72 @@ function renderSpecialAfterSales(scheduleMap, agents, assignments, today) {
 }
 
 function renderMealTimes(scheduleMap, agents, assignments, today) {
-    const LUNCH_SLOTS = ["11:00-11:30","11:30-12:00","12:00-12:30","12:30-13:00","13:00-13:30","13:30-14:00"];
-    const DINNER_SLOTS = ["17:00-17:30","17:30-18:00","18:00-18:30","18:30-19:00","19:00-19:30","19:30-20:00"];
-    const TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"];
-
     const assignMap = {};
     assignments.forEach(a => { assignMap[a.employee_name] = a; });
 
-    const working = agents.filter(a => {
+    // Meal times are independent of work_types — show all working employees with meal slots
+    const mealWorking = agents.filter(a => {
         const shift = scheduleMap[a.name];
         if (!shift || !isEffWorking(shift, today, a.name)) return false;
-        const assign = assignMap[a.name];
-        return assign && assign.work_types && assign.work_types.length > 0;
+        return true;
     });
 
-    function buildCard(title, slots, slotKey) {
-        // slotTeamMap[slot][team] = [names]
+    const mealTeams = ["在线组", "热线组", "售后组"];
+
+    function buildCard(title, slotKey) {
+        // Collect all actual slots: slotTeamMap[slot][team] = [names]
         const slotTeamMap = {};
-        let hasData = false;
-        working.forEach(e => {
+        mealWorking.forEach(e => {
             const assign = assignMap[e.name];
             const slot = (assign && assign[slotKey]) ? assign[slotKey].trim() : '';
-            if (!slot || !slots.includes(slot)) return;
+            if (!slot) return;
             if (!slotTeamMap[slot]) slotTeamMap[slot] = {};
             if (!slotTeamMap[slot][e.team]) slotTeamMap[slot][e.team] = [];
             slotTeamMap[slot][e.team].push(e.name);
-            hasData = true;
         });
 
-        // 用餐时间只展示在线组、热线组、售后组
-        const mealTeams = ["在线组", "热线组", "售后组"];
+        const allSlots = Object.keys(slotTeamMap).sort();
+        if (allSlots.length === 0) {
+            return `<div class="meal-card">
+                <div class="meal-card-title">${title}</div>
+                <div style="color:#94a3b8;text-align:center;padding:20px 0;font-size:0.85rem;">暂无数据</div>
+            </div>`;
+        }
 
-        // Only show slots that have at least one person
-        const activeSlots = slots.filter(s => slotTeamMap[s] && Object.values(slotTeamMap[s]).some(arr => arr.length > 0));
+        // Group slots by start hour
+        const hourGroups = {};
+        allSlots.forEach(slot => {
+            const m = slot.match(/^(\d{1,2}):/);
+            if (!m) return;
+            const hour = parseInt(m[1]);
+            if (!hourGroups[hour]) hourGroups[hour] = [];
+            hourGroups[hour].push(slot);
+        });
 
-        const tableHtml = hasData ? `
+        const sortedHours = Object.keys(hourGroups).map(Number).sort((a, b) => a - b);
+
+        let rowsHtml = '';
+        sortedHours.forEach(hour => {
+            const slotList = hourGroups[hour];
+            const hourLabel = `${hour}时`;
+
+            rowsHtml += `<tr class="meal-hour-row">
+                <td colspan="${mealTeams.length + 1}" class="meal-hour-header">${hourLabel}</td>
+            </tr>`;
+
+            slotList.forEach(slot => {
+                rowsHtml += `<tr>
+                    <td class="col-slot-head">${slot}</td>
+                    ${mealTeams.map(team => {
+                        const names = (slotTeamMap[slot] && slotTeamMap[slot][team]) || [];
+                        return `<td class="col-name${names.length === 0 ? ' meal-empty' : ''}">${names.length ? names.join('、') : '-'}</td>`;
+                    }).join('')}
+                </tr>`;
+            });
+        });
+
+        return `<div class="meal-card">
+            <div class="meal-card-title">${title}</div>
             <table class="meal-table meal-table-flip">
                 <thead>
                     <tr>
@@ -743,29 +779,15 @@ function renderMealTimes(scheduleMap, agents, assignments, today) {
                         ${mealTeams.map(t => `<th class="col-team-head team-bg-${t}">${t}</th>`).join('')}
                     </tr>
                 </thead>
-                <tbody>
-                    ${activeSlots.map(slot => `
-                        <tr>
-                            <td class="col-slot-head">${slot}</td>
-                            ${mealTeams.map(team => {
-                                const names = (slotTeamMap[slot] && slotTeamMap[slot][team]) || [];
-                                return `<td class="col-name${names.length === 0 ? ' meal-empty' : ''}">${names.length ? names.join('、') : '-'}</td>`;
-                            }).join('')}
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>` : `<div style="color:#94a3b8;text-align:center;padding:20px 0;font-size:0.85rem;">暂无数据</div>`;
-
-        return `<div class="meal-card">
-            <div class="meal-card-title">${title}</div>
-            ${tableHtml}
+                <tbody>${rowsHtml}</tbody>
+            </table>
         </div>`;
     }
 
     document.getElementById("mealSection").innerHTML = `
         <div class="meal-cols">
-            <div class="meal-col">${buildCard('午餐', LUNCH_SLOTS, 'lunch_slot')}</div>
-            <div class="meal-col">${buildCard('晚餐', DINNER_SLOTS, 'dinner_slot')}</div>
+            <div class="meal-col">${buildCard('午餐', 'lunch_slot')}</div>
+            <div class="meal-col">${buildCard('晚餐', 'dinner_slot')}</div>
         </div>
     `;
 }
