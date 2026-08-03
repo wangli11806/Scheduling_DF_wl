@@ -174,7 +174,8 @@
         .cascade-dropdown {
             display: none; position: fixed; z-index: 999;
             background: white; border: 1px solid #e2e8f0; border-radius: 10px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.1); min-width: 110px; overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1); min-width: 110px;
+            max-height: 260px; overflow-y: auto;
         }
         .cascade-select.open .cascade-dropdown { display: block; }
         .cascade-back {
@@ -315,7 +316,7 @@
 
 <script>
 const API_BASE = '/api';
-const WORK_TYPES = ["热线","在线","工单","反向工单","自主售后","售后单","紧急","本地生活","卡密查询"];
+const WORK_TYPES = ["热线","在线","工单","反向工单","自主售后","售后单","紧急","本地生活"];
 function generateMealSlots(rangeStart, rangeEnd, durationMin) {
     const slots = [""];
     const [rsH, rsM] = rangeStart.split(":").map(Number);
@@ -342,7 +343,7 @@ function getMealInfo(shiftName, mealType) {
     const config = SHIFT_MEAL[shiftName];
     if (!config || !config[mealType]) return { slots: [""], disabled: true };
     const rangeStart = mealType === 'lunch' ? '11:00' : '16:00';
-    const rangeEnd = mealType === 'lunch' ? '14:00' : '20:00';
+    const rangeEnd = mealType === 'lunch' ? '14:30' : '20:00';
     return { slots: generateMealSlots(rangeStart, rangeEnd, config[mealType]), disabled: false };
 }
 let restMap = {};
@@ -665,6 +666,7 @@ function renderTable() {
                 const value = item.dataset.value;
                 if (level === 'hour') {
                     buildCascadeLevel(cs, 'slot', value);
+                    positionCascadeDropdown(cs);
                 } else {
                     selectCascadeSlot(cs, value);
                 }
@@ -674,6 +676,7 @@ function renderTable() {
             if (back) {
                 const cs = back.closest('.cascade-select');
                 buildCascadeLevel(cs, 'hour');
+                positionCascadeDropdown(cs);
                 return;
             }
 
@@ -711,9 +714,14 @@ function positionCascadeDropdown(cs) {
     const trigger = cs.querySelector('.cascade-trigger');
     const dropdown = cs.querySelector('.cascade-dropdown');
     const rect = trigger.getBoundingClientRect();
-    const h = Math.min(dropdown.scrollHeight || 200, 260);
+    const dropdownH = Math.min(dropdown.scrollHeight || 200, 260);
     const spaceBelow = window.innerHeight - rect.bottom;
-    dropdown.style.top = (spaceBelow < h && rect.top > spaceBelow ? Math.max(0, rect.top - h - 4) : rect.bottom + 4) + 'px';
+    const spaceAbove = rect.top;
+    if (spaceBelow < dropdownH && spaceAbove > spaceBelow) {
+        dropdown.style.top = Math.max(4, rect.top - dropdownH - 4) + 'px';
+    } else {
+        dropdown.style.top = Math.min(rect.bottom + 4, window.innerHeight - dropdownH - 4) + 'px';
+    }
     dropdown.style.left = Math.min(rect.left, window.innerWidth - 140) + 'px';
 }
 
