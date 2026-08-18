@@ -41,7 +41,7 @@ DELETE FROM ...           # 必须带 WHERE，且条件不能用变量拼接
 
 ```bash
 # 本地备份 ECS 数据库
-scp root@115.29.235.170:/opt/schedule/schedule.db "数据备份/schedule_$(date +%Y-%m-%d_%H%M).db"
+scp root@47.102.102.115:/opt/schedule/schedule.db "数据备份/schedule_$(date +%Y-%m-%d_%H%M).db"
 
 # 本地备份本地数据库
 cp schedule.db "数据备份/schedule_local_$(date +%Y-%m-%d_%H%M).db"

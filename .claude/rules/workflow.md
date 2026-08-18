@@ -84,7 +84,7 @@ description: 任务启动流程——动手改代码之前必须先向用户提�
 
 ```bash
 # 本地执行
-scp root@115.29.235.170:/opt/schedule/schedule.db "数据备份/schedule_$(date +%Y-%m-%d).db"
+scp root@47.102.102.115:/opt/schedule/schedule.db "数据备份/schedule_$(date +%Y-%m-%d).db"
 ```
 
 ### 部署执行顺序（重要！）

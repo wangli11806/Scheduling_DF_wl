@@ -43,7 +43,7 @@ result = subprocess.run(
     ['ssh', '-o', 'StrictHostKeyChecking=no',
      '-o', 'PubkeyAuthentication=no',
      '-o', 'PreferredAuthentications=password',
-     'root@115.29.235.170', cmd],
+     'root@47.102.102.115', cmd],
     env=env, capture_output=True, timeout=60, start_new_session=True
 )
 print(result.stdout.decode('utf-8', errors='replace'))

@@ -14,7 +14,7 @@ python app.py
 
 # 4. 打开浏览器访问登录页
 # 本地：http://127.0.0.1:5000
-# 云服务器：http://115.29.235.170:5000
+# 云服务器：http://47.102.102.115:5000
 ```
 
 默认密码 `paiban2026`，可通过 `python setup_password.py` 修改。密码哈希存储在 `auth_config.json`（不入 git）。
