@@ -417,14 +417,11 @@ function renderMealCell(empName, shiftName, mealType, currentValue) {
 
 function isEffWorking(shiftName, dateStr, empName) {
     const key = dateStr + '|' + empName;
-    if (leaveDaySet.has(key)) return false;
+    // shift-based：真实班次(work_hours>0) → 上班；休息/休假 → 看是否有按小时加班
     const sh = shiftHoursMap[shiftName] || 0;
+    if (sh > 0) return true;
     const oh = overtimeMap[key] || 0;
-    const wh = sh + oh;
-    if (wh <= 0) return false;
-    const rh = restMap[key] || 0;
-    const lh = leaveHoursMap[key] || 0;
-    return (wh - rh - lh) > 0;
+    return oh > 0;
 }
 
 let currentDate = new Date();

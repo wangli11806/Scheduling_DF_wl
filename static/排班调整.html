@@ -245,7 +245,7 @@
                         <th>东福工号</th>
                         <th>员工</th>
                         <th>类型</th>
-                        <th>请假类型</th>
+                        <th>细分类型</th>
                         <th>日期</th>
                         <th>开始时间</th>
                         <th>结束时间</th>
@@ -307,29 +307,40 @@
             <label class="required">加班日期</label>
             <input type="date" id="modalLeaveDate">
         </div>
-        <div class="modal-row" style="flex-direction:row; gap:16px;">
-            <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
-                <label class="required">加班开始时间</label>
-                <input type="time" id="modalStartTime">
-            </div>
-            <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
-                <label class="required">加班结束时间</label>
-                <input type="time" id="modalEndTime">
+        <div class="modal-row">
+            <label class="required">加班类型</label>
+            <div class="status-radio-group" id="modalOvertimeTypeGroup">
+                <label class="status-radio"><input type="radio" name="overtimeType" value="按小时" checked> 按小时</label>
+                <label class="status-radio"><input type="radio" name="overtimeType" value="A班"> A班</label>
+                <label class="status-radio"><input type="radio" name="overtimeType" value="B班"> B班</label>
+                <label class="status-radio"><input type="radio" name="overtimeType" value="C班"> C班</label>
             </div>
         </div>
-        <div class="modal-row">
-            <label>扣除餐休</label>
-            <div style="display:flex;align-items:center;gap:12px;">
-                <label class="toggle-switch">
-                    <input type="checkbox" id="modalDeductionToggle">
-                    <span class="toggle-slider"></span>
-                </label>
-                <span id="deductionLabel" style="font-size:0.92rem;color:#94a3b8;">关闭</span>
-                <span id="deductionInputGroup" style="display:none;align-items:center;gap:8px;">
-                    <span style="font-size:0.92rem;color:#475569;">扣除时长</span>
-                    <input type="number" id="modalDeduction" step="0.1" min="0.1" max="8.0" placeholder="0.0" style="width:80px;">
-                    <span style="font-size:0.92rem;color:#475569;">小时</span>
-                </span>
+        <div id="modalHourlyGroup">
+            <div class="modal-row" style="flex-direction:row; gap:16px;">
+                <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+                    <label class="required">加班开始时间</label>
+                    <input type="time" id="modalStartTime">
+                </div>
+                <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+                    <label class="required">加班结束时间</label>
+                    <input type="time" id="modalEndTime">
+                </div>
+            </div>
+            <div class="modal-row">
+                <label>扣除餐休</label>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="modalDeductionToggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span id="deductionLabel" style="font-size:0.92rem;color:#94a3b8;">关闭</span>
+                    <span id="deductionInputGroup" style="display:none;align-items:center;gap:8px;">
+                        <span style="font-size:0.92rem;color:#475569;">扣除时长</span>
+                        <input type="number" id="modalDeduction" step="0.1" min="0.1" max="8.0" placeholder="0.0" style="width:80px;">
+                        <span style="font-size:0.92rem;color:#475569;">小时</span>
+                    </span>
+                </div>
             </div>
         </div>
         <div class="modal-row">
@@ -603,9 +614,8 @@
             const isLeave = rtype === 'leave';
             const isFullDayLeave = isLeave && !r.start_time;
             const typeBadge = TYPE_BADGES[rtype] || TYPE_BADGES['overtime'];
-            const leaveTypeCell = isLeave
-                ? (r.leave_type ? escapeHtml(r.leave_type) : '<span style="color:#94a3b8;">-</span>')
-                : '<span style="color:#94a3b8;">-</span>';
+            const subType = r.leave_type || r.overtime_type;
+            const subTypeCell = subType ? escapeHtml(subType) : '<span style="color:#94a3b8;">-</span>';
             return `
             <tr>
                 <td style="font-weight:500; color:#6366f1;">${r.id}</td>
@@ -613,7 +623,7 @@
                 <td>${r.dongfu_id ? escapeHtml(r.dongfu_id) : '<span style="color:#94a3b8;">-</span>'}</td>
                 <td style="font-weight:600;">${escapeHtml(r.employee_name)}</td>
                 <td>${typeBadge}</td>
-                <td>${leaveTypeCell}</td>
+                <td>${subTypeCell}</td>
                 <td>${escapeHtml(r.leave_date)}</td>
                 <td>${isFullDayLeave ? '<span style="color:#94a3b8;">-</span>' : escapeHtml(r.start_time)}</td>
                 <td>${isFullDayLeave ? '<span style="color:#94a3b8;">-</span>' : escapeHtml(r.end_time)}</td>
@@ -725,12 +735,55 @@
         return selected ? selected.getAttribute('data-name') : '';
     }
 
+    function setOvertimeTypeMode(mode) {
+        const isHourly = mode === '按小时';
+        document.getElementById("modalHourlyGroup").style.display = isHourly ? 'block' : 'none';
+    }
+
+    function setOvertimeShiftOptionsDisabled(disabled) {
+        document.querySelectorAll('input[name="overtimeType"]').forEach(radio => {
+            if (radio.value === '按小时') return;
+            radio.disabled = disabled;
+            const label = radio.closest('.status-radio');
+            if (label) {
+                label.style.opacity = disabled ? '0.4' : '1';
+                label.style.pointerEvents = disabled ? 'none' : '';
+            }
+        });
+    }
+
+    async function refreshOvertimeShiftLock() {
+        const employeeName = document.getElementById("modalEmployee").value;
+        const date = document.getElementById("modalLeaveDate").value;
+        if (!employeeName || !date) {
+            setOvertimeShiftOptionsDisabled(false);
+            return;
+        }
+        try {
+            const info = await apiGet('/schedule/lookup?employee=' + encodeURIComponent(employeeName) + '&date=' + date);
+            const curShift = (info && info.shift_name) ? info.shift_name : '休息';
+            if (curShift !== '休息') {
+                // 当前已有排班：锁住具体班次，强制按小时加班
+                setOvertimeShiftOptionsDisabled(true);
+                document.querySelector('input[name="overtimeType"][value="按小时"]').checked = true;
+                setOvertimeTypeMode('按小时');
+            } else {
+                setOvertimeShiftOptionsDisabled(false);
+            }
+        } catch (e) {
+            setOvertimeShiftOptionsDisabled(false);
+        }
+    }
+
     function openAddModal() {
         editingRecordId = null;
         document.getElementById("modalTitle").textContent = "加班申请";
         renderTeamSelect("modalTeam", "");
         document.getElementById("modalLeaveDate").value = new Date().toISOString().slice(0, 10);
         document.getElementById("modalEmployee").innerHTML = '<option value="">请先选择团队</option>';
+        document.querySelector('input[name="overtimeType"][value="按小时"]').checked = true;
+        setOvertimeTypeMode('按小时');
+        setOvertimeShiftOptionsDisabled(false);
         document.getElementById("modalStartTime").value = "";
         document.getElementById("modalEndTime").value = "";
         document.getElementById("modalRemark").value = "";
@@ -762,6 +815,13 @@
         document.getElementById("modalLeaveDate").value = record.leave_date;
         renderEmployeeSelect(record.team);
         document.getElementById("modalEmployee").value = record.employee_name;
+        // 加班类型回填（历史记录无 overtime_type 视为按小时）
+        const ot = record.overtime_type && record.overtime_type !== '' ? record.overtime_type : '按小时';
+        const otRadio = document.querySelector('input[name="overtimeType"][value="' + ot + '"]');
+        if (otRadio) otRadio.checked = true;
+        else document.querySelector('input[name="overtimeType"][value="按小时"]').checked = true;
+        setOvertimeTypeMode(ot);
+        setOvertimeShiftOptionsDisabled(false);
         document.getElementById("modalStartTime").value = record.start_time || '';
         document.getElementById("modalEndTime").value = record.end_time || '';
         document.getElementById("modalRemark").value = record.remark || "";
@@ -926,39 +986,42 @@
         const team = document.getElementById("modalTeam").value;
         const leaveDate = document.getElementById("modalLeaveDate").value;
         const employeeName = document.getElementById("modalEmployee").value;
-        const startTime = document.getElementById("modalStartTime").value;
-        const endTime = document.getElementById("modalEndTime").value;
         const remark = document.getElementById("modalRemark").value.trim();
         const submitter = getSelectedSupervisor("modalSubmitterOptions");
+        const overtimeType = (document.querySelector('input[name="overtimeType"]:checked') || {}).value || '按小时';
 
         if (!team) { showToast("请选择所属团队"); return; }
         if (!leaveDate) { showToast("请选择加班日期"); return; }
         if (!employeeName) { showToast("请选择员工"); return; }
-        if (!startTime) { showToast("请选择加班开始时间"); return; }
-        if (!endTime) { showToast("请选择加班结束时间"); return; }
         if (!submitter) { showToast("请选择提交人"); return; }
         if (remark.length > 200) { showToast("备注不能超过200字符"); return; }
 
-        const deductionToggle = document.getElementById("modalDeductionToggle").checked;
-        let deduction = 0;
-        if (deductionToggle) {
-            const val = parseFloat(document.getElementById("modalDeduction").value);
-            if (isNaN(val) || val < 0.1 || val > 8.0) {
-                showToast("扣除时长需在0.1~8.0小时之间");
-                return;
+        let startTime = '', endTime = '', deduction = 0;
+        if (overtimeType === '按小时') {
+            startTime = document.getElementById("modalStartTime").value;
+            endTime = document.getElementById("modalEndTime").value;
+            if (!startTime) { showToast("请选择加班开始时间"); return; }
+            if (!endTime) { showToast("请选择加班结束时间"); return; }
+            const deductionToggle = document.getElementById("modalDeductionToggle").checked;
+            if (deductionToggle) {
+                const val = parseFloat(document.getElementById("modalDeduction").value);
+                if (isNaN(val) || val < 0.1 || val > 8.0) {
+                    showToast("扣除时长需在0.1~8.0小时之间");
+                    return;
+                }
+                deduction = val;
             }
-            deduction = val;
         }
 
-        const data = { type: 'overtime', team, leaveDate, employeeName, startTime, endTime, remark, submitter, deduction };
+        const data = { type: 'overtime', team, leaveDate, employeeName, overtimeType, startTime, endTime, remark, submitter, deduction };
 
         try {
             if (editingRecordId) {
                 await apiPut('/leave-records/' + editingRecordId, data);
-                showToast("调休记录已更新");
+                showToast("加班记录已更新");
             } else {
                 await apiPost('/leave-records', data);
-                showToast("调休记录已创建");
+                showToast("加班申请已提交");
             }
             closeRecordModal();
             await loadRecords();
@@ -1341,6 +1404,17 @@
         document.getElementById("modalTeam").addEventListener("change", function() {
             renderEmployeeSelect(this.value);
             document.getElementById("modalEmployee").value = "";
+        });
+
+        // 员工/日期变更时，根据当前排班锁定加班类型
+        document.getElementById("modalEmployee").addEventListener("change", refreshOvertimeShiftLock);
+        document.getElementById("modalLeaveDate").addEventListener("change", refreshOvertimeShiftLock);
+
+        // 加班类型切换
+        document.querySelectorAll('input[name="overtimeType"]').forEach(radio => {
+            radio.addEventListener("change", function() {
+                setOvertimeTypeMode(this.value);
+            });
         });
 
         // 备注字数统计

@@ -166,72 +166,27 @@
         .shift-tag.shift-请假 { background: #fff3e0; color: #bf360c; }
         .shift-tag.shift-none { background: #f5f5f5; color: #bdbdbd; }
 
-        /* 加班标记（红色） */
-        .leave-badge {
-            position: relative; display: inline-block;
-            padding: 2px 7px; border-radius: 4px;
-            background: #fee2e2; color: #dc2626; font-size: 0.72rem;
-            font-weight: 600; cursor: pointer; margin-left: 4px;
-            vertical-align: middle; line-height: 1.4;
+        /* 角标（右上角三角标记） */
+        .schedule-cell { position: relative; }
+        .corner-badge {
+            position: absolute; top: 0; right: 0;
+            width: 0; height: 0;
+            border-style: solid;
+            border-width: 0 14px 14px 0;
+            border-color: transparent #dc2626 transparent transparent;
+            cursor: pointer; z-index: 5;
         }
-        .leave-badge:hover { background: #fecaca; }
-        .leave-tooltip {
-            display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
-            transform: translateX(-50%); background: #1e293b; color: white;
+        .corner-badge.cb-swap  { border-color: transparent #e11d48 transparent transparent; }  /* 换班 浅红 */
+        .corner-badge.cb-leave { border-color: transparent #f59e0b transparent transparent; }  /* 休假 黄 */
+        .corner-badge.cb-rest  { border-color: transparent #2563eb transparent transparent; }  /* 换休 蓝 */
+        .corner-tooltip {
+            display: none; position: absolute; top: 18px; right: 0;
+            background: #1e293b; color: white;
             padding: 5px 12px; border-radius: 8px; font-size: 0.85rem;
             white-space: nowrap; z-index: 100; font-weight: 500;
-            pointer-events: none;
+            pointer-events: none; text-align: left;
         }
-        .leave-tooltip::after {
-            content: ''; position: absolute; top: 100%; left: 50%;
-            transform: translateX(-50%); border: 6px solid transparent;
-            border-top-color: #1e293b;
-        }
-        .leave-badge:hover .leave-tooltip { display: block; }
-
-        /* 放休标记 */
-        .rest-badge {
-            position: relative; display: inline-block;
-            padding: 2px 7px; border-radius: 4px;
-            background: #dcfce7; color: #16a34a; font-size: 0.72rem;
-            font-weight: 600; cursor: pointer; margin-left: 4px;
-            vertical-align: middle; line-height: 1.4;
-        }
-        .rest-badge:hover { background: #bbf7d0; }
-        .rest-tooltip {
-            display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
-            transform: translateX(-50%); background: #1e293b; color: white;
-            padding: 5px 12px; border-radius: 8px; font-size: 0.85rem;
-            white-space: nowrap; z-index: 100; font-weight: 500;
-            pointer-events: none;
-        }
-        .rest-tooltip::after {
-            content: ''; position: absolute; top: 100%; left: 50%;
-            transform: translateX(-50%); border: 6px solid transparent;
-            border-top-color: #1e293b;
-        }
-        .rest-badge:hover .rest-tooltip { display: block; }
-
-        /* 换班标记（浅红） */
-        .swap-overtime-badge {
-            background: #ffe4e6; color: #e11d48;
-        }
-        .swap-overtime-badge:hover { background: #fecdd3; }
-        .swap-overtime-badge:hover .leave-tooltip { display: block; }
-
-        /* 换休标记（蓝色） */
-        .swap-rest-badge {
-            background: #dbeafe; color: #2563eb;
-        }
-        .swap-rest-badge:hover { background: #bfdbfe; }
-        .swap-rest-badge:hover .rest-tooltip { display: block; }
-
-        /* 请假标记（黄色） */
-        .leave-all-day-badge {
-            background: #fef3c7; color: #ca8a04;
-        }
-        .leave-all-day-badge:hover { background: #fde68a; }
-        .leave-all-day-badge:hover .rest-tooltip { display: block; }
+        .corner-badge:hover .corner-tooltip { display: block; }
 
         /* 换班/换休标记 */
         .swap-badge {
@@ -543,8 +498,8 @@
         const data = await apiGet('/shifts');
         shiftDataMap = {};
         data.forEach(s => { shiftDataMap[s.name] = s; });
-        const workShifts = data.map(s => s.name).filter(s => s !== "休息" && s !== "请假" && s !== "放休");
-        const shiftOptions = [...workShifts, "休息", "放休", "请假"];
+        const workShifts = data.filter(s => (s.work_hours || 0) > 0).map(s => s.name);
+        const shiftOptions = [...workShifts, "休息"];
         return { shiftOptions, workShifts };
     }
     async function loadEmployeesFromAPI(statusFilter) {
@@ -559,11 +514,22 @@
         data.forEach(r => {
             scheduleMap.set(`${r.schedule_date}|${r.employee_name}`, r.shift_name);
         });
+        // 原始排班（用于角标「原班次」）
+        try {
+            const raw = await apiGet('/raw-schedules');
+            rawShiftMap.clear();
+            raw.forEach(r => {
+                rawShiftMap.set(`${r.schedule_date}|${r.employee_name}`, r.shift_name);
+            });
+        } catch (e) {
+            rawShiftMap.clear();
+        }
     }
 
     let shiftOptions = [];
     let workShifts = [];
     let employees = [];
+    let rawShiftMap = new Map(); // key: `${date}|${employeeName}` → 原始班次
     let leaveMap = new Map(); // key: `${date}|${employeeName}` → overtime records
     let restMap = new Map();  // key: `${date}|${employeeName}` → rest records
     let swapMap = new Map();  // key: `${date}|${employeeName}` → [{swapType, otherPerson, otherDate, remark}, ...]
@@ -578,10 +544,10 @@
                 const rtype = r.type || 'overtime';
                 if (rtype === 'rest' || rtype === '换休' || rtype === 'leave') {
                     if (!restMap.has(key)) restMap.set(key, []);
-                    restMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time, type: rtype });
+                    restMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time, type: rtype, leave_type: r.leave_type, overtime_type: r.overtime_type });
                 } else if (rtype === 'overtime' || rtype === '换班') {
                     if (!leaveMap.has(key)) leaveMap.set(key, []);
-                    leaveMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time, type: rtype });
+                    leaveMap.get(key).push({ hours: r.hours, start_time: r.start_time, end_time: r.end_time, type: rtype, leave_type: r.leave_type, overtime_type: r.overtime_type });
                 }
             });
         } catch (e) {
@@ -917,37 +883,38 @@
                                 let shiftVal = getShift(d.date, emp.name);
                                 let cls = getShiftClass(shiftVal);
                                 let leaveKey = `${d.date}|${emp.name}`;
+                                let rawShift = rawShiftMap.get(leaveKey) || '休息';
                                 let leaveRecords = leaveMap.get(leaveKey);
-                                let leaveHtml = '';
-                                if (leaveRecords && leaveRecords.length > 0) {
-                                    let totalH = leaveRecords.reduce((s, r) => s + r.hours, 0);
-                                    let isSwapOvertime = leaveRecords[0].type === '换班';
-                                    let badgeLabel = isSwapOvertime ? '换班' : '加班';
-                                    let badgeClass = isSwapOvertime ? 'leave-badge swap-overtime-badge' : 'leave-badge';
-                                    let tooltipParts = leaveRecords.map(r => `${r.type==='换班'?'换班':'加班'}${r.hours.toFixed(1)}h（${r.start_time}-${r.end_time}）`);
-                                    leaveHtml = `<span class="${badgeClass}" data-employee="${emp.name}" title="${tooltipParts.join('; ').replace(/"/g, '&quot;')}">${badgeLabel}<span class="leave-tooltip">${tooltipParts.join('<br>')}</span></span>`;
-                                }
                                 let restRecords = restMap.get(leaveKey);
-                                let restHtml = '';
-                                if (restRecords && restRecords.length > 0) {
-                                    let rtype0 = restRecords[0].type;
-                                    if (rtype0 === 'leave') {
-                                        if (restRecords[0].start_time) {
-                                            let totalLeaveH = restRecords.reduce((s, r) => s + (r.hours || 0), 0);
-                                            let leaveTip = `按小时休假 ${totalLeaveH.toFixed(1)}h（${restRecords[0].start_time}-${restRecords[0].end_time}）`;
-                                            restHtml = `<span class="rest-badge" data-employee="${emp.name}" title="${leaveTip}">休假${totalLeaveH.toFixed(1)}h<span class="rest-tooltip">${leaveTip}</span></span>`;
-                                        } else {
-                                            restHtml = `<span class="rest-badge leave-all-day-badge" data-employee="${emp.name}" title="全天休假">休假<span class="rest-tooltip">全天休假</span></span>`;
-                                        }
+                                let badgeHtml = '';
+                                if (leaveRecords && leaveRecords.length > 0) {
+                                    let r0 = leaveRecords[0];
+                                    if (r0.type === '换班') {
+                                        let tip = `原班次：${rawShift}，新班次：${shiftVal}`;
+                                        badgeHtml = `<span class="corner-badge cb-swap" data-employee="${emp.name}" title="${tip}"><span class="corner-tooltip">${tip}</span></span>`;
                                     } else {
-                                        let isSwapRest = rtype0 === '换休';
-                                        let badgeLabel = isSwapRest ? '换休' : '放休';
-                                        let badgeClass = isSwapRest ? 'rest-badge swap-rest-badge' : 'rest-badge';
-                                        let tooltipParts = restRecords.map(r => `${r.type==='换休'?'换休':'放休'}${r.hours.toFixed(1)}h（${r.start_time}-${r.end_time}）`);
-                                        restHtml = `<span class="${badgeClass}" data-employee="${emp.name}" title="${tooltipParts.join('; ').replace(/"/g, '&quot;')}">${badgeLabel}<span class="rest-tooltip">${tooltipParts.join('<br>')}</span></span>`;
+                                        let ot = r0.overtime_type || '按小时';
+                                        let tip = `原排班：${rawShift}；加班类型：${ot}；加班时长：${(r0.hours || 0).toFixed(1)}h`;
+                                        badgeHtml = `<span class="corner-badge" data-employee="${emp.name}" title="${tip}"><span class="corner-tooltip">${tip}</span></span>`;
+                                    }
+                                } else if (restRecords && restRecords.length > 0) {
+                                    let r0 = restRecords[0];
+                                    if (r0.type === 'leave') {
+                                        let lt = r0.leave_type || '';
+                                        let tip;
+                                        if (r0.start_time) {
+                                            let totalLeaveH = restRecords.reduce((s, r) => s + (r.hours || 0), 0);
+                                            tip = `原排班：${rawShift}；休假类型：${lt}；休假时长：${totalLeaveH.toFixed(1)}h`;
+                                        } else {
+                                            tip = `原排班：${rawShift}；休假类型：${lt}；全天休假`;
+                                        }
+                                        badgeHtml = `<span class="corner-badge cb-leave" data-employee="${emp.name}" title="${tip}"><span class="corner-tooltip">${tip}</span></span>`;
+                                    } else {
+                                        let tip = `原班次：${rawShift}，新班次：休息`;
+                                        badgeHtml = `<span class="corner-badge cb-rest" data-employee="${emp.name}" title="${tip}"><span class="corner-tooltip">${tip}</span></span>`;
                                     }
                                 }
-                                return `<td><div style="display:flex;align-items:center;justify-content:center;gap:4px;"><span class="shift-tag ${cls}" data-shift="${shiftVal}">${shiftVal}</span>${leaveHtml}${restHtml}</div></td>`;
+                                return `<td class="schedule-cell"><div style="display:flex;align-items:center;justify-content:center;"><span class="shift-tag ${cls}" data-shift="${shiftVal}">${shiftVal}</span></div>${badgeHtml}</td>`;
                             }).join('')}
                         </tr>
                     `).join('')}
@@ -958,16 +925,8 @@
     function renderCurrentView() {
         const container = document.getElementById("scheduleViewContainer");
         container.innerHTML = renderTableView(currentBaseDate);
-        // 加班标记点击跳转
-        container.querySelectorAll('.leave-badge').forEach(badge => {
-            badge.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const empName = badge.getAttribute('data-employee');
-                window.location.href = `/schedule-adjustment?employee=${encodeURIComponent(empName)}`;
-            });
-        });
-        // 放休标记点击跳转
-        container.querySelectorAll('.rest-badge').forEach(badge => {
+        // 角标点击跳转
+        container.querySelectorAll('.corner-badge').forEach(badge => {
             badge.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const empName = badge.getAttribute('data-employee');
@@ -1001,7 +960,7 @@
 
     function renderLegend() {
         const container = document.getElementById("shiftLegend");
-        const legendShifts = workShifts.filter(s => s !== "休息" && s !== "放休" && s !== "请假");
+        const legendShifts = workShifts;
         if (legendShifts.length === 0) {
             container.innerHTML = "";
             container.style.display = "none";
@@ -1032,7 +991,7 @@
             const tag = e.target.closest(".shift-tag");
             if (!tag) return;
             const shiftName = tag.getAttribute("data-shift");
-            if (!shiftName || shiftName === "休息" || shiftName === "放休" || shiftName === "请假") return;
+            if (!shiftName || shiftName === "休息" || shiftName === "休假") return;
             const info = shiftDataMap[shiftName];
             if (!info || !info.start_time || !info.end_time) return;
             tooltip.innerHTML = `【${shiftName}】${info.start_time}-${info.end_time}`;
@@ -1042,7 +1001,7 @@
             const tag = e.target.closest(".shift-tag");
             if (!tag) { tooltip.style.display = "none"; return; }
             const shiftName = tag.getAttribute("data-shift");
-            if (!shiftName || shiftName === "休息" || shiftName === "放休" || shiftName === "请假") {
+            if (!shiftName || shiftName === "休息" || shiftName === "休假") {
                 tooltip.style.display = "none"; return;
             }
             if (tooltip.style.display === "block") {
@@ -1065,7 +1024,7 @@
         popoverTarget = { date, employeeName };
 
         const optClass = (s) => {
-            const map = { "A班":"opt-A班","B班":"opt-B班","C班":"opt-C班","T班":"opt-T班","E班":"opt-E班","F班":"opt-F班","休息":"opt-休息","放休":"opt-放休","请假":"opt-请假" };
+            const map = { "A班":"opt-A班","B班":"opt-B班","C班":"opt-C班","T班":"opt-T班","E班":"opt-E班","F班":"opt-F班","休息":"opt-休息" };
             return map[s] || "";
         };
 
@@ -1131,7 +1090,7 @@
         const container = document.getElementById("modalShiftRadios");
         const colorMap = {
             "A班":"A班","B班":"B班","C班":"C班","T班":"T班",
-            "E班":"E班","F班":"F班","休息":"休息","放休":"放休","请假":"请假"
+            "E班":"E班","F班":"F班","休息":"休息"
         };
         container.innerHTML = shiftOptions.map((s, i) =>
             `<div class="radio-option">
