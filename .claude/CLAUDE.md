@@ -26,12 +26,14 @@ python app.py           # 本地开发 http://127.0.0.1:5000
 ```
 排班系统/
 ├── app.py                # 后端（Flask路由、SQLite、导入导出、通知）
-├── shared.css / shared.js  # 公共样式和脚本（组件库）
 ├── requirements.txt       # flask, openpyxl, waitress, chinesecalendar
-├── *.html                 # 前端页面（每页独立 <style> + <script>）
 ├── schedule.service       # systemd 服务配置
-├── notify_config.json     # 钉钉通知配置
-└── logs/                  # 运行日志
+├── static/                # 前端页面 + 公共组件
+│   ├── *.html             # 各页面（每页独立 <style> + <script>）
+│   └── shared.css / shared.js  # 公共样式和脚本（组件库）
+├── scripts/               # 辅助脚本（密码设置、一次性导入/调试）
+├── logs/                  # 运行日志
+└── 数据备份/              # 数据库备份（不入 git）
 ```
 
 ## 架构要点

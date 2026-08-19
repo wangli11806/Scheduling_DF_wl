@@ -19,7 +19,7 @@ try:
 except ImportError:
     is_workday = None
 
-app = Flask(__name__, static_folder=".", static_url_path="")
+app = Flask(__name__, static_folder="static", static_url_path="")
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # 开发阶段禁用静态文件缓存
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schedule.db")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

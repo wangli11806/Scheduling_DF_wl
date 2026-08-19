@@ -7,7 +7,7 @@
 pip install -r requirements.txt
 
 # 2. 首次部署需设置登录密码（已设置过可跳过）
-python setup_password.py
+python scripts/setup_password.py
 
 # 3. 启动后端（数据库自动创建并初始化）
 python app.py

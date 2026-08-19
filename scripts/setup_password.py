@@ -7,7 +7,7 @@ import os
 import hashlib
 import secrets
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUTH_FILE = os.path.join(BASE_DIR, "auth_config.json")
 
 
