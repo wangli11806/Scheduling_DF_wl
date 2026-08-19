@@ -1269,6 +1269,22 @@
                 renderCurrentView();
                 return;
             }
+            const tag = e.target.closest(".shift-tag");
+            if (!tag) return;
+            const cell = tag.closest("td");
+            const row = tag.closest("tr");
+            const cells = [...row.children];
+            const colIndex = cells.indexOf(cell);
+            const empNameEl = cells[1]?.querySelector(".emp-name");
+            if (!empNameEl) return;
+            const employeeName = empNameEl.getAttribute("data-employee") || empNameEl.textContent.trim();
+            const table = tag.closest("table");
+            const headerCells = table.querySelectorAll("thead tr:first-child th");
+            const dateHeader = headerCells[colIndex];
+            const date = dateHeader ? dateHeader.textContent.trim() : null;
+            if (!date || !employeeName) return;
+            const currentShift = tag.getAttribute("data-shift");
+            showShiftPopover(tag, date, employeeName, currentShift);
         });
 
         // 气泡窗按钮

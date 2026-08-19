@@ -147,7 +147,7 @@ form.addEventListener('submit', async (e) => {
         if (data.ok) {
             // 登录成功，跳转到之前的页面或首页（仅允许本站相对路径）
             const next = new URLSearchParams(window.location.search).get('next') || '/';
-            window.location.href = next.startsWith('/') ? next : '/';
+            window.location.href = (next.startsWith('/') && !next.startsWith('//')) ? next : '/';
         } else {
             showError(data.error || '登录失败');
         }

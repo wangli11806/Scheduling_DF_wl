@@ -380,14 +380,14 @@
         tbody.innerHTML = filtered.map(e => `
             <tr>
                 <td style="font-weight:500; color:#6366f1;">${e.id}</td>
-                <td>${e.dongfu_id || '<span style="color:#94a3b8;">-</span>'}</td>
-                <td style="font-weight:600;">${e.name}</td>
-                <td><span class="team-badge">${e.team}</span></td>
-                <td>${e.sub_team || '<span style="color:#94a3b8;">-</span>'}</td>
-                <td><span class="pos-badge ${e.position==='客服'?'agent':'manager'}">${e.position}</span></td>
-                <td>${e.work_hour_system || '<span style="color:#94a3b8;">-</span>'}</td>
-                <td>${e.supervisor || '<span style="color:#94a3b8;">-</span>'}</td>
-                <td>${e.entry_date || '<span style="color:#94a3b8;">-</span>'}</td>
+                <td>${e.dongfu_id ? escapeHtml(e.dongfu_id) : '<span style="color:#94a3b8;">-</span>'}</td>
+                <td style="font-weight:600;">${escapeHtml(e.name)}</td>
+                <td><span class="team-badge">${escapeHtml(e.team)}</span></td>
+                <td>${e.sub_team ? escapeHtml(e.sub_team) : '<span style="color:#94a3b8;">-</span>'}</td>
+                <td><span class="pos-badge ${e.position==='客服'?'agent':'manager'}">${escapeHtml(e.position)}</span></td>
+                <td>${e.work_hour_system ? escapeHtml(e.work_hour_system) : '<span style="color:#94a3b8;">-</span>'}</td>
+                <td>${e.supervisor ? escapeHtml(e.supervisor) : '<span style="color:#94a3b8;">-</span>'}</td>
+                <td>${e.entry_date ? escapeHtml(e.entry_date) : '<span style="color:#94a3b8;">-</span>'}</td>
                 <td style="text-align:center;">
                     <label class="toggle-switch">
                         <input type="checkbox" ${e.status!=='inactive'?'checked':''} onchange="toggleStatus('${e.id}', this.checked)">

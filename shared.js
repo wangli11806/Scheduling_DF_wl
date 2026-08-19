@@ -40,6 +40,12 @@ function showToast(msg) {
     setTimeout(() => { toast.style.display = "none"; }, 2500);
 }
 
+function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[ch]);
+}
+
 // ========== 多选下拉组件 ==========
 function initMultiSelect(config) {
     const { containerId, triggerId, searchId, selectAllId, optionsId, clearId, okId, getOptions, getSelected, setSelected, placeholder } = config;
@@ -74,7 +80,7 @@ function initMultiSelect(config) {
         }
         optionsContainer.innerHTML = opts.map(o => {
             const checked = sel.includes(o) ? 'checked' : '';
-            return `<label class="ms-option"><input type="checkbox" value="${o}" ${checked}> ${o}</label>`;
+            return `<label class="ms-option"><input type="checkbox" value="${escapeHtml(o)}" ${checked}> ${escapeHtml(o)}</label>`;
         }).join('');
         if(opts.length === 0) {
             optionsContainer.innerHTML = `<div style="padding:16px;text-align:center;color:#94a3b8;">无匹配选项</div>`;

@@ -609,6 +609,12 @@ def api_employees_update(emp_id):
     if old_name != name:
         db.execute("UPDATE employees SET supervisor=? WHERE supervisor=?", (name, old_name))
         db.execute("UPDATE schedules SET employee_name=? WHERE employee_name=?", (name, old_name))
+        db.execute("UPDATE raw_schedules SET employee_name=? WHERE employee_name=?", (name, old_name))
+        db.execute("UPDATE monthly_schedules SET employee_name=? WHERE employee_name=?", (name, old_name))
+        db.execute("UPDATE daily_assignments SET employee_name=? WHERE employee_name=?", (name, old_name))
+        db.execute("UPDATE leave_records SET employee_name=? WHERE employee_name=?", (name, old_name))
+        db.execute("UPDATE swap_records SET person_a=? WHERE person_a=?", (name, old_name))
+        db.execute("UPDATE swap_records SET person_b=? WHERE person_b=?", (name, old_name))
     db.commit()
     row = db.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     return jsonify(dict(row))
@@ -829,6 +835,10 @@ def api_shifts_update(shift_id):
     # 如果改了名字，同步排班记录
     if old_name != name:
         db.execute("UPDATE schedules SET shift_name=? WHERE shift_name=?", (name, old_name))
+        db.execute("UPDATE raw_schedules SET shift_name=? WHERE shift_name=?", (name, old_name))
+        db.execute("UPDATE monthly_schedules SET shift_name=? WHERE shift_name=?", (name, old_name))
+        db.execute("UPDATE swap_records SET shift_a=? WHERE shift_a=?", (name, old_name))
+        db.execute("UPDATE swap_records SET shift_b=? WHERE shift_b=?", (name, old_name))
     db.commit()
     row = db.execute("SELECT * FROM shifts WHERE id=?", (shift_id,)).fetchone()
     return jsonify(dict(row))

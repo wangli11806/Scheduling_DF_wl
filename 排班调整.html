@@ -603,17 +603,17 @@
             return `
             <tr>
                 <td style="font-weight:500; color:#6366f1;">${r.id}</td>
-                <td><span class="team-badge">${r.team}</span></td>
-                <td>${r.dongfu_id || '<span style="color:#94a3b8;">-</span>'}</td>
-                <td style="font-weight:600;">${r.employee_name}</td>
+                <td><span class="team-badge">${escapeHtml(r.team)}</span></td>
+                <td>${r.dongfu_id ? escapeHtml(r.dongfu_id) : '<span style="color:#94a3b8;">-</span>'}</td>
+                <td style="font-weight:600;">${escapeHtml(r.employee_name)}</td>
                 <td>${typeBadge}</td>
-                <td>${r.leave_date}</td>
-                <td>${isLeave ? '<span style="color:#94a3b8;">-</span>' : r.start_time}</td>
-                <td>${isLeave ? '<span style="color:#94a3b8;">-</span>' : r.end_time}</td>
+                <td>${escapeHtml(r.leave_date)}</td>
+                <td>${isLeave ? '<span style="color:#94a3b8;">-</span>' : escapeHtml(r.start_time)}</td>
+                <td>${isLeave ? '<span style="color:#94a3b8;">-</span>' : escapeHtml(r.end_time)}</td>
                 <td style="font-weight:600;">${isLeave ? '<span style="color:#94a3b8;">-</span>' : r.hours.toFixed(1)}</td>
-                <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${(r.remark || '').replace(/"/g, '&quot;')}">${r.remark || '<span style="color:#94a3b8;">-</span>'}</td>
-                <td>${r.submitter || '<span style="color:#94a3b8;">-</span>'}</td>
-                <td style="font-size:0.85rem; color:#64748b;">${r.updated_at || r.created_at || '-'}</td>
+                <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(r.remark || '')}">${r.remark ? escapeHtml(r.remark) : '<span style="color:#94a3b8;">-</span>'}</td>
+                <td>${r.submitter ? escapeHtml(r.submitter) : '<span style="color:#94a3b8;">-</span>'}</td>
+                <td style="font-size:0.85rem; color:#64748b;">${escapeHtml(r.updated_at || r.created_at || '-')}</td>
                 <td class="actions-cell" style="justify-content:center;">
                     <button class="btn btn-sm edit-btn" data-id="${r.id}">编辑</button>
                     <button class="btn btn-sm btn-danger delete-btn" data-id="${r.id}">删除</button>

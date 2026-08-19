@@ -812,16 +812,16 @@ async function init() {
         shiftDataMap = {};
         shifts.forEach(s => { shiftDataMap[s.name] = s; });
 
-        // 调整记录：restMap=放休+换休, overtimeMap=加班+换班, leaveDaySet=请假
+        // 调整记录：restMap=放休, overtimeMap=加班+换班, leaveDaySet=请假+换休
         restMap = {};
         overtimeMap = {};
         leaveDaySet = new Set();
         leaveRecords.forEach(r => {
             const key = r.leave_date + '|' + r.employee_name;
             const rt = r.type || 'overtime';
-            if (rt === 'leave') {
+            if (rt === 'leave' || rt === '换休') {
                 leaveDaySet.add(key);
-            } else if (rt === 'rest' || rt === '换休') {
+            } else if (rt === 'rest') {
                 restMap[key] = (restMap[key] || 0) + r.hours;
             } else if (rt === 'overtime' || rt === '换班') {
                 overtimeMap[key] = (overtimeMap[key] || 0) + r.hours;
