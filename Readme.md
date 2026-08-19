@@ -17,7 +17,7 @@ python app.py
 # 云服务器：http://47.102.102.115:5000
 ```
 
-默认密码 `paiban2026`，可通过 `python setup_password.py` 修改。密码哈希存储在 `auth_config.json`（不入 git）。
+默认用户名 `admin`、密码 `paiban2026`，可通过 `python scripts/setup_password.py` 修改。密码哈希存储在 `auth_config.json`（不入 git），机器人查询 token 也在此文件的 `bot_token` 字段。
 
 ---
 
@@ -28,7 +28,7 @@ python app.py
 | 前端 | 原生 HTML/CSS/JS（单页面应用） |
 | 后端 | Python Flask |
 | 数据库 | SQLite（单文件，零配置） |
-| 服务器 | waitress（Windows）/ gunicorn（Linux） |
+| 服务器 | waitress（跨平台生产服务器） |
 | Excel | openpyxl（导入导出） |
 
 ---
@@ -37,29 +37,36 @@ python app.py
 
 ```
 排班系统/
-├── app.py                  # Flask 后端（API + 数据库 + 鉴权）
-├── login.html              # 登录页
-├── setup_password.py       # 密码设置工具
+├── app.py                  # Flask 后端（API + 数据库 + 鉴权 + 月度排班）
 ├── requirements.txt        # Python 依赖
-├── run_server.py           # 生产模式启动脚本
 ├── schedule.service        # Linux systemd 服务配置
 ├── schedule.db             # SQLite 数据库（自动生成，不入 git）
-├── send_daily_notice.py    # 排班通知脚本
-├── notify_config.json      # 钉钉通知配置
-├── shared.css              # 公共样式（侧边栏、按钮、弹窗、表格等）
-├── shared.js               # 公共脚本（API 封装、多选组件）
-├── 总览.html               # 总览看板
-├── 排班表.html             # 排班表（日/周/月视图）
-├── 原始排班.html           # 原始排班表
-├── 工作安排.html           # 工作安排
-├── 排班调整.html           # 排班调整
-├── 员工管理.html           # 员工管理（CRUD + 导入）
-├── 班次设置.html           # 班次设置
-├── 通知设置.html           # 钉钉通知设置
-├── 月度时长统计.html       # 排班时长统计
-├── 工作安排统计.html       # 工作安排统计
+├── auth_config.json        # 登录凭证 + 机器人 token（不入 git）
+├── static/                 # 前端页面 + 公共组件
+│   ├── login.html          # 登录页
+│   ├── shared.css          # 公共样式（侧边栏、按钮、弹窗、表格、多选等）
+│   ├── shared.js           # 公共脚本（API 封装、多选组件）
+│   ├── 总览.html           # 总览看板（/overview）
+│   ├── 排班表.html         # 排班表（日/周/月视图）（/schedule）
+│   ├── 排班表_移动端.html  # 排班表移动端（/schedule-mobile）
+│   ├── 月度排班.html       # 月度排班（/monthly-schedule）
+│   ├── 原始排班.html       # 原始排班表（/raw-schedule）
+│   ├── 工作安排.html       # 工作安排（/work-arrangement）
+│   ├── 排班调整.html       # 排班调整（/schedule-adjustment）
+│   ├── 员工管理.html       # 员工管理 CRUD + 导入（/employee）
+│   ├── 班次设置.html       # 班次设置（/shift）
+│   ├── 月度时长统计.html   # 排班时长统计（/monthly-hours）
+│   └── 工作安排统计.html   # 工作安排统计（/work-stats）
+├── scripts/                # 辅助脚本
+│   ├── setup_password.py   # 登录用户名/密码设置工具
+│   ├── run_server.py       # 启动脚本（NSSM 注册 Windows 服务用）
+│   └── ...                 # 一次性导入/调试脚本
+├── logs/                   # 运行日志（error/output，不入 git）
+├── 数据备份/               # 数据库备份（不入 git）
 └── Readme.md               # 本文件
 ```
+
+> 页面通过英文路由访问（如 `/overview`、`/schedule`、`/employee`），登录后从 `/` 进入排班表。前端文件统一放在 `static/` 目录，由 Flask `send_static_file` 提供。
 
 ---
 
@@ -114,6 +121,19 @@ python app.py
 
 > 原始排班支持独立管理，批量操作后**自动单向同步**到排班表。
 
+### monthly_schedules（月度排班表）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增 |
+| schedule_date | TEXT | 日期 YYYY-MM-DD |
+| employee_name | TEXT | 员工姓名 |
+| shift_name | TEXT | 班次名称（仅 A班/B班/C班） |
+| finalized | INTEGER | 是否已最终保存（0/1） |
+| UNIQUE(schedule_date, employee_name) | | 每人每天只能有一条 |
+
+> 月度排班按月编辑，最终保存（finalize）后锁定当月不可修改，并将数据导入 `raw_schedules` 和 `schedules` 两张表。
+
 ### daily_assignments（工作安排表）
 
 | 字段 | 类型 | 说明 |
@@ -126,12 +146,12 @@ python app.py
 | dinner_slot | TEXT | 晚餐时段（可空） |
 | UNIQUE(date, employee_name) | | 每人每天只能有一条安排 |
 
-### leave_records（排班调整记录表：加班/请假/放休）
+### leave_records（排班调整记录表：加班/请假/放休/换班/换休）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 自增 |
-| type | TEXT | overtime=加班 / leave=请假 / rest=放休 |
+| type | TEXT | overtime=加班 / leave=请假 / rest=放休 / 换班 / 换休 |
 | team | TEXT | 所属团队 |
 | leave_date | TEXT | 加班/请假/放休日期 YYYY-MM-DD |
 | dongfu_id | TEXT | 东福工号（自动查询填入） |
@@ -145,7 +165,7 @@ python app.py
 | created_at | TEXT | 创建时间 |
 | updated_at | TEXT | 最后修改时间 |
 
-> 请假提交后自动同步排班表为 SHF009（请假）。删除请假记录时同步清除排班。加班和放休不修改排班，在排班表上以 tag 形式显示。
+> 请假提交后自动同步排班表为 SHF009（请假），删除请假记录时同步清除排班。加班/换班和放休/换休不修改排班，在排班表上以 tag 形式显示，仅影响当日上班状态判定。
 
 ### swap_records（换班/换休记录表）
 
@@ -211,6 +231,19 @@ POST   /api/raw-schedules/import-matrix  Excel 导入（矩阵格式）
 GET    /api/raw-schedules/export         Excel 导出
 ```
 
+### 月度排班
+
+```
+GET    /api/monthly-schedules?year_month=YYYY-MM     查询某月全部月度排班（含 finalized 标记）
+POST   /api/monthly-schedules                       保存/删除单个单元格班次 {schedule_date, employee_name, shift_name}
+POST   /api/monthly-schedules/finalize              最终保存 {year_month}，导入 raw_schedules 并锁定
+GET    /api/monthly-schedules/export?year_month=      Excel 导出（样式与页面一致）
+```
+
+- 班次仅支持 `A班`/`B班`/`C班`；`shift_name` 为空则删除该单元格记录
+- 已 finalize 的月份不可再修改，需重新编辑时需先解除锁定
+- finalize 会删除当月已有 `raw_schedules`/`schedules` 后重新导入，并标记 `finalized=1`
+
 ### 工作安排
 
 ```
@@ -218,13 +251,13 @@ GET    /api/assignments?date=            查询某日安排
 POST   /api/assignments                  批量保存 {date, assignments: [{employee_name, work_types, lunch_slot, dinner_slot}, ...]}
 ```
 
-工作类型：热线、在线、工单、反向工单、自主售后、售后单、紧急、本地生活、卡密查询
+工作类型：热线、在线、工单、反向工单、自主售后、售后单、紧急、本地生活
 
 ### 排班调整
 
 ```
 GET    /api/leave-records?team=&month=&type=  列表（支持团队、月份、类型筛选）
-POST   /api/leave-records                     新增（type=overtime/leave/rest）
+POST   /api/leave-records                     新增（type=overtime/leave/rest/换班/换休）
 PUT    /api/leave-records/<id>                编辑
 DELETE /api/leave-records/<id>                删除（leave 类型同步清除排班）
 GET    /api/leave-records/export?team=&month=&employees=  Excel 导出
@@ -233,17 +266,19 @@ GET    /api/swap-records?team=&month=         换班记录列表
 POST   /api/swap-records                      提交换班/换休
 ```
 
-**三种记录类型**：
+**五种记录类型**：
 
 | type | 说明 | 时间字段 | 排班影响 |
 |------|------|----------|----------|
 | overtime | 加班 | 必填 | 不修改排班，排班表显示红色"加班"tag |
 | leave | 请假 | 不需要 | 自动将排班改为 SHF009（请假）；删除记录时清除排班 |
 | rest | 放休 | 必填 | 不修改排班，排班表显示绿色"放休"tag |
+| 换班 | 换班 | 必填 | 同加班，工时附加到当日在班时长 |
+| 换休 | 换休 | 必填 | 同放休，校验总休息时长不超过班次工时 |
 
-**时长计算**（overtime/rest）：结束时间 - 开始时间 - 扣除餐休时长（若开启），支持跨天。
+**时长计算**（除 leave 外的类型）：结束时间 - 开始时间 - 扣除餐休时长（若开启），支持跨天。请假（leave）时长为 0。
 
-**换班逻辑**：交换两个日期上两人的排班班次。换休时额外自动为休息变上班的员工创建加班记录，工时取所换班次的 `work_hours`。
+**换班/换休逻辑**：换班不直接修改排班表，而是拆分为记录——替班日期为替班人创建「换班」记录（附加工时），原班次日期为原班人创建「换休」记录（记为休息），工时取所换班次的 `work_hours`。同时写入 `swap_records` 表留痕。
 
 导出时开始/结束时间自动拼接日期（如 `2026-05-29 09:00`），跨天场景结束时间自动加一天。
 
@@ -254,7 +289,7 @@ GET    /api/monthly-hours-stats?year=&month=&work_system=&teams=  统计查询
 GET    /api/monthly-hours-stats/export                               Excel 导出
 ```
 
-根据排班数据统计每位员工的月度排班时长，与工时制度时长对比计算差额。支持按工时制度和团队筛选。
+基于原始排班表（`raw_schedules`）统计每位员工的月度排班时长，与工时制度时长对比计算差额。支持按工时制度（`work_system`）和团队（`teams`，逗号分隔）筛选。
 
 ### 工作安排统计
 
@@ -272,17 +307,19 @@ GET    /api/db/stats                     统计信息
 GET    /api/db/download                  下载 schedule.db
 ```
 
-### 通知设置
+### 通知设置（已废弃）
+
+> ⚠️ 钉钉群通知功能已移除。`/api/notify/*` 路由、`send_daily_notice.py`、`notify_config.json`、`通知设置.html` 均已删除，仅保留机器人排班查询的 `bot_token`（见下文）。以下接口不再可用：
 
 ```
-GET    /api/notify/config                读取配置
-POST   /api/notify/config                保存配置并同步计划任务
-POST   /api/notify/test                  发送 Webhook 测试消息
-POST   /api/notify/send                  手动发送通知 {task_id, date?}
-GET    /api/notify/preview?date=&prefix=&suffix=  预览消息内容
-POST   /api/notify/task                  新增定时任务
-PUT    /api/notify/task/<id>             编辑定时任务
-DELETE /api/notify/task/<id>             删除定时任务
+GET    /api/notify/config                读取配置（已移除）
+POST   /api/notify/config                保存配置并同步计划任务（已移除）
+POST   /api/notify/test                  发送 Webhook 测试消息（已移除）
+POST   /api/notify/send                  手动发送通知 {task_id, date?}（已移除）
+GET    /api/notify/preview?date=&prefix=&suffix=  预览消息内容（已移除）
+POST   /api/notify/task                  新增定时任务（已移除）
+PUT    /api/notify/task/<id>             编辑定时任务（已移除）
+DELETE /api/notify/task/<id>             删除定时任务（已移除）
 ```
 
 ### 机器人排班查询（Token 鉴权）
@@ -324,8 +361,8 @@ GET    /api/bot/schedules?token=<TOKEN>&date=YYYY-MM-DD&employee=张三
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| working | bool | 有效上班状态。`班次工作时长 - 放休时长 > 0` 为 true，反之为 false |
-| rest_hours | float | 当日放休总小时数，用于了解不上班的原因
+| working | bool | 有效上班状态。请假/换休为 false；否则 `(班次工时 + 加班/换班工时) - (放休/换休工时) > 0` 为 true |
+| rest_hours | float | 当日放休+换休总小时数，用于了解不上班的原因 |
 
 ---
 
@@ -333,12 +370,14 @@ GET    /api/bot/schedules?token=<TOKEN>&date=YYYY-MM-DD&employee=张三
 
 | 来源 | 目标 | 方式 |
 |------|------|------|
-| 总览页月历 | 排班表 | `排班表.html?date=2026-05-15&view=day` |
-| 排班表加班标记 | 排班调整 | `排班调整.html?employee=张三`（自动筛选该员工） |
+| 总览页月历 | 排班表 | `/schedule?date=2026-05-15&view=day` |
+| 排班表加班标记 | 排班调整 | `/schedule-adjustment?employee=张三`（自动筛选该员工） |
 
 ---
 
-## 钉钉群通知
+## 钉钉群通知（已废弃）
+
+> ⚠️ 此功能已移除，以下内容仅为历史记录，当前系统不再支持钉钉群通知。机器人排班查询（`/api/bot/schedules`）仍可用。
 
 ### 配置步骤
 
@@ -393,10 +432,11 @@ python send_daily_notice.py --check-and-send        # 定时调度入口
 # 2. 上传项目到服务器
 scp -r ./* root@<公网IP>:/opt/schedule/
 
-# 3. 安装依赖
+# 3. 安装依赖（创建 venv 虚拟环境）
 ssh root@<公网IP>
-apt update && apt install python3-pip -y
-cd /opt/schedule && pip install -r requirements.txt gunicorn
+apt update && apt install python3-pip python3-venv -y
+cd /opt/schedule && python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
 
 # 4. 安装 systemd 服务（开机自启）
 cp schedule.service /etc/systemd/system/
@@ -411,7 +451,7 @@ systemctl enable --now schedule
 ```bash
 cd /opt/schedule && git pull origin main
 # 如有新增 Python 依赖，执行：
-pip install -r requirements.txt
+./venv/bin/pip install -r requirements.txt
 systemctl restart schedule
 ```
 
@@ -444,27 +484,27 @@ CMD ["python", "app.py"]
 
 ### 方案 C：Windows 服务（本地运行）
 
-将 `run_server.py` 注册为 Windows 服务（如通过 NSSM），可实现开机自启和后台运行。
+将 `scripts/run_server.py` 注册为 Windows 服务（如通过 NSSM），可实现开机自启和后台运行。
 
 ---
 
 ## 注意事项
 
-- **员工是否上班的判断逻辑**：
-  ```
-  有效上班 = 班次工作时长 > 0 且 (班次工作时长 - 当日放休总时长) > 0
-  ```
-  | 场景 | 班次 | 放休 | 结果 |
+- **员工是否上班的判断逻辑**（`wh` = 排班班次工时 + 加班/换班工时，`rh` = 放休/换休工时）：
+
+  | 场景 | 排班 | 标签 | 结果 |
   |------|------|------|------|
-  | 正常上班 | A班(8h) | 无 | 上班 |
-  | 半天放休 | A班(8h) | 4h | 上班（4h>0） |
-  | 全天放休 | A班(8h) | 8h | 不上班（0h≤0） |
-  | 休息/请假 | 休息(0h)/请假(0h) | - | 不上班 |
+  | 正常上班 | wh>0 | 无 | 上班 |
+  | 请假/换休 | wh>0 | 请假 或 换休 | 不上班（优先级最高，全天不上） |
+  | 半天放休 | wh>0 | 放休 | wh−rh>0 则上班，否则不上 |
+  | 加班/换班 | wh≥0 | 加班/换班 | 上班 |
+  | 休息日 | wh=0 | 无 | 不上班 |
+  | 休息日替班 | wh=0 | 加班/换班 | 上班 |
+
+  该逻辑应用于：总览页上班人数统计、工作安排页员工列表、排班表视图筛选、机器人排班查询。放休时长提交时校验不超过当日班次工作时长。
   
-  该逻辑应用于：总览页上班人数统计、工作安排页员工列表、排班表视图筛选。放休时长提交时校验不超过当日班次工作时长。
-  
-- **登录鉴权**：已启用密码登录，默认密码 `paiban2026`，通过 `python setup_password.py` 修改
-- **auth_config.json**：不入 git，首次部署或迁移服务器后需运行 `python setup_password.py`
+- **登录鉴权**：已启用用户名+密码登录，默认 `admin` / `paiban2026`，通过 `python scripts/setup_password.py` 修改
+- **auth_config.json**：不入 git，首次部署或迁移服务器后需运行 `python scripts/setup_password.py`
 - **数据库备份**：`schedule.db` 需定期备份，建议 crontab 定时执行 `cp schedule.db backup/schedule_$(date +%Y%m%d).db`
-- **文件迁移**：部署到新服务器后，`notify_config.json` 和 `schedule.db` 需从旧环境手动迁移
+- **文件迁移**：部署到新服务器后，`schedule.db` 和 `auth_config.json` 需从旧环境手动迁移
 - SQLite 适合小团队，高并发建议切换 MySQL/PostgreSQL
