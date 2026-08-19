@@ -932,7 +932,13 @@
                                 if (restRecords && restRecords.length > 0) {
                                     let rtype0 = restRecords[0].type;
                                     if (rtype0 === 'leave') {
-                                        restHtml = `<span class="rest-badge leave-all-day-badge" data-employee="${emp.name}" title="全天请假">请假<span class="rest-tooltip">全天请假</span></span>`;
+                                        if (restRecords[0].start_time) {
+                                            let totalLeaveH = restRecords.reduce((s, r) => s + (r.hours || 0), 0);
+                                            let leaveTip = `按小时请假 ${totalLeaveH.toFixed(1)}h（${restRecords[0].start_time}-${restRecords[0].end_time}）`;
+                                            restHtml = `<span class="rest-badge" data-employee="${emp.name}" title="${leaveTip}">请假${totalLeaveH.toFixed(1)}h<span class="rest-tooltip">${leaveTip}</span></span>`;
+                                        } else {
+                                            restHtml = `<span class="rest-badge leave-all-day-badge" data-employee="${emp.name}" title="全天请假">请假<span class="rest-tooltip">全天请假</span></span>`;
+                                        }
                                     } else {
                                         let isSwapRest = rtype0 === '换休';
                                         let badgeLabel = isSwapRest ? '换休' : '放休';

@@ -169,11 +169,20 @@ def api_bot_schedules():
 
     db = get_db()
 
-    # 查询当日请假人员
-    leave_emps = set(r["employee_name"] for r in db.execute(
-        "SELECT DISTINCT employee_name FROM leave_records WHERE type='leave' AND leave_date=?",
+    # 查询当日全天请假人员（start_time 为空）
+    full_day_leave_emps = set(r["employee_name"] for r in db.execute(
+        "SELECT DISTINCT employee_name FROM leave_records WHERE type='leave' AND start_time='' AND leave_date=?",
         [date_str]
     ).fetchall())
+
+    # 查询当日按小时请假记录，汇总每个员工的请假时长
+    hourly_leave_rows = db.execute("""
+        SELECT employee_name, SUM(hours) AS leave_hours
+        FROM leave_records
+        WHERE type='leave' AND start_time!='' AND leave_date = ?
+        GROUP BY employee_name
+    """, [date_str]).fetchall()
+    hourly_leave_map = {r["employee_name"]: r["leave_hours"] or 0 for r in hourly_leave_rows}
 
     # 查询该日期所有放休+换休记录，汇总每个员工的放休总时长
     rest_rows = db.execute("""
@@ -231,10 +240,10 @@ def api_bot_schedules():
         schedule_emps.add(r["employee_name"])
         wh = (r["work_hours"] or 0) + overtime_map.get(r["employee_name"], 0)
         rh = rest_map.get(r["employee_name"], 0)
-        if r["employee_name"] in leave_emps:
+        if r["employee_name"] in full_day_leave_emps:
             working = False
         else:
-            working = (wh - rh) > 0
+            working = (wh - rh - hourly_leave_map.get(r["employee_name"], 0)) > 0
         schedules.append({
             "employee": r["employee_name"],
             "team": r["team"] or "",
@@ -446,6 +455,13 @@ def init_db():
         db.execute("ALTER TABLE leave_records ADD COLUMN type TEXT DEFAULT 'overtime'")
     except:
         pass
+    # 兼容旧表：新增 leave_type 列（病假/年假/奖励假期/其他）
+    try:
+        db.execute("ALTER TABLE leave_records ADD COLUMN leave_type TEXT DEFAULT ''")
+    except:
+        pass
+    # 迁移：放休(rest) 并入 休假(leave)，请假类型=调休
+    db.execute("UPDATE leave_records SET type='leave', leave_type='调休' WHERE type='rest'")
     db.executescript("""
         CREATE TABLE IF NOT EXISTS swap_records (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1786,6 +1802,7 @@ def api_leave_records_create():
     end_time = (data.get("endTime") or "").strip()
     remark = (data.get("remark") or "").strip()
     submitter = (data.get("submitter") or "").strip()
+    leave_type = (data.get("leaveType") or "").strip()
     deduction = data.get("deduction", 0)
     if deduction is None:
         deduction = 0
@@ -1797,10 +1814,14 @@ def api_leave_records_create():
         return jsonify({"error": "请选择日期"}), 400
     if not employee_name:
         return jsonify({"error": "请选择员工"}), 400
-    if not is_leave and not start_time:
-        return jsonify({"error": "请选择开始时间"}), 400
-    if not is_leave and not end_time:
-        return jsonify({"error": "请选择结束时间"}), 400
+    if is_leave:
+        if bool(start_time) != bool(end_time):
+            return jsonify({"error": "开始时间和结束时间需同时填写"}), 400
+    else:
+        if not start_time:
+            return jsonify({"error": "请选择开始时间"}), 400
+        if not end_time:
+            return jsonify({"error": "请选择结束时间"}), 400
     if len(remark) > 200:
         return jsonify({"error": "备注不能超过200字符"}), 400
     if deduction < 0 or deduction > 8:
@@ -1820,7 +1841,7 @@ def api_leave_records_create():
     dongfu_id = emp["dongfu_id"] if emp else ""
 
     if is_leave:
-        hours = 0
+        hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10) if start_time else 0
     else:
         hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
 
@@ -1832,8 +1853,8 @@ def api_leave_records_create():
             return jsonify({"error": str(e)}), 400
 
     db.execute(
-        "INSERT INTO leave_records(type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-        (record_type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction)
+        "INSERT INTO leave_records(type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction, leave_type) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        (record_type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction, leave_type)
     )
     db.commit()
     row = db.execute("SELECT * FROM leave_records WHERE id=last_insert_rowid()").fetchone()
@@ -1861,6 +1882,7 @@ def api_leave_records_update(record_id):
     end_time = (data.get("endTime") or "").strip()
     remark = (data.get("remark") or "").strip()
     submitter = (data.get("submitter") or "").strip()
+    leave_type = (data.get("leaveType") or "").strip()
     deduction = data.get("deduction", 0)
     if deduction is None:
         deduction = 0
@@ -1868,8 +1890,12 @@ def api_leave_records_update(record_id):
 
     if not team or not leave_date or not employee_name:
         return jsonify({"error": "必填字段不能为空"}), 400
-    if not is_leave and (not start_time or not end_time):
-        return jsonify({"error": "必填字段不能为空"}), 400
+    if is_leave:
+        if bool(start_time) != bool(end_time):
+            return jsonify({"error": "开始时间和结束时间需同时填写"}), 400
+    else:
+        if not start_time or not end_time:
+            return jsonify({"error": "必填字段不能为空"}), 400
     if len(remark) > 200:
         return jsonify({"error": "备注不能超过200字符"}), 400
     if deduction < 0 or deduction > 8:
@@ -1887,7 +1913,7 @@ def api_leave_records_update(record_id):
     dongfu_id = emp["dongfu_id"] if emp else ""
 
     if is_leave:
-        hours = 0
+        hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10) if start_time else 0
     else:
         hours = max(0, round((_calc_leave_hours(start_time, end_time) - deduction) * 10) / 10)
 
@@ -1899,8 +1925,8 @@ def api_leave_records_update(record_id):
             return jsonify({"error": str(e)}), 400
 
     db.execute(
-        "UPDATE leave_records SET type=?, team=?, leave_date=?, dongfu_id=?, employee_name=?, start_time=?, end_time=?, hours=?, remark=?, submitter=?, deduction=?, updated_at=datetime('now','localtime') WHERE id=?",
-        (record_type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction, record_id)
+        "UPDATE leave_records SET type=?, team=?, leave_date=?, dongfu_id=?, employee_name=?, start_time=?, end_time=?, hours=?, remark=?, submitter=?, deduction=?, leave_type=?, updated_at=datetime('now','localtime') WHERE id=?",
+        (record_type, team, leave_date, dongfu_id, employee_name, start_time, end_time, hours, remark, submitter, deduction, leave_type, record_id)
     )
     db.commit()
     row = db.execute("SELECT * FROM leave_records WHERE id=?", (record_id,)).fetchone()
@@ -1945,8 +1971,8 @@ def api_leave_records_export():
     wb = Workbook()
     ws = wb.active
     ws.title = "排班调整记录"
-    type_map = {"overtime": "加班", "leave": "请假", "rest": "放休", "换班": "换班", "换休": "换休"}
-    ws.append(["清单ID", "类型", "所属团队", "日期", "东福工号", "员工", "开始时间", "结束时间", "时长(h)", "备注", "提交人", "最后修改时间"])
+    type_map = {"overtime": "加班", "leave": "休假", "rest": "放休", "换班": "换班", "换休": "换休"}
+    ws.append(["清单ID", "类型", "请假类型", "所属团队", "日期", "东福工号", "员工", "开始时间", "结束时间", "时长(h)", "备注", "提交人", "最后修改时间"])
 
     for r in rows:
         leave_date = r["leave_date"]
@@ -1954,7 +1980,7 @@ def api_leave_records_export():
         end_time = r["end_time"] or ""
         r_type = r["type"] or "overtime"
 
-        if r_type == "leave":
+        if r_type == "leave" and not start_time:
             export_start = ""
             export_end = ""
         else:
@@ -1970,7 +1996,7 @@ def api_leave_records_export():
                 export_end = f"{leave_date} {end_time}"
 
         ws.append([
-            r["id"], type_map.get(r_type, r_type), r["team"], r["leave_date"],
+            r["id"], type_map.get(r_type, r_type), r["leave_type"] or "", r["team"], r["leave_date"],
             r["dongfu_id"], r["employee_name"],
             export_start, export_end, r["hours"], r["remark"], r["submitter"],
             r["updated_at"] or r["created_at"]
@@ -1979,15 +2005,16 @@ def api_leave_records_export():
     ws.column_dimensions["A"].width = 10
     ws.column_dimensions["B"].width = 10
     ws.column_dimensions["C"].width = 12
-    ws.column_dimensions["D"].width = 14
+    ws.column_dimensions["D"].width = 12
     ws.column_dimensions["E"].width = 14
-    ws.column_dimensions["F"].width = 12
-    ws.column_dimensions["G"].width = 20
+    ws.column_dimensions["F"].width = 14
+    ws.column_dimensions["G"].width = 12
     ws.column_dimensions["H"].width = 20
-    ws.column_dimensions["I"].width = 14
-    ws.column_dimensions["J"].width = 24
-    ws.column_dimensions["K"].width = 12
-    ws.column_dimensions["L"].width = 20
+    ws.column_dimensions["I"].width = 20
+    ws.column_dimensions["J"].width = 14
+    ws.column_dimensions["K"].width = 24
+    ws.column_dimensions["L"].width = 12
+    ws.column_dimensions["M"].width = 20
 
     from io import BytesIO
     output = BytesIO()

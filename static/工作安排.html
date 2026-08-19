@@ -350,6 +350,7 @@ let restMap = {};
 let overtimeMap = {};
 let overtimeTimeMap = {};  // key → [{start_time, end_time}, ...] 加班/换班时间范围
 let leaveDaySet = new Set();
+let leaveHoursMap = {};
 let shiftHoursMap = {};
 
 function getCascadeOptions(shiftName, mealType) {
@@ -422,7 +423,8 @@ function isEffWorking(shiftName, dateStr, empName) {
     const wh = sh + oh;
     if (wh <= 0) return false;
     const rh = restMap[key] || 0;
-    return (wh - rh) > 0;
+    const lh = leaveHoursMap[key] || 0;
+    return (wh - rh - lh) > 0;
 }
 
 let currentDate = new Date();
@@ -481,11 +483,18 @@ async function loadData() {
     overtimeMap = {};
     overtimeTimeMap = {};
     leaveDaySet = new Set();
+    leaveHoursMap = {};
     leaveRecords.forEach(r => {
         const key = r.leave_date + '|' + r.employee_name;
         const rt = r.type || 'overtime';
-        if (rt === 'leave' || rt === '换休') {
+        if (rt === '换休') {
             leaveDaySet.add(key);
+        } else if (rt === 'leave') {
+            if (r.start_time) {
+                leaveHoursMap[key] = (leaveHoursMap[key] || 0) + r.hours;
+            } else {
+                leaveDaySet.add(key);
+            }
         } else if (rt === 'rest') {
             restMap[key] = (restMap[key] || 0) + r.hours;
         } else if (rt === 'overtime' || rt === '换班') {

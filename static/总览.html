@@ -393,18 +393,20 @@ function yesterdayStr() {
 let restMap = {};
 let overtimeMap = {};
 let leaveDaySet = new Set();
+let leaveHoursMap = {};
 let shiftHoursMap = {};
 
 function isEffWorking(shiftName, date, empName) {
     const key = date + '|' + empName;
-    // 有请假 → 不上班（请假优先）
+    // 有全天请假/换休 → 不上班（优先级最高）
     if (leaveDaySet.has(key)) return false;
     const sh = shiftHoursMap[shiftName] || 0;
     const oh = overtimeMap[key] || 0;
     const wh = sh + oh;
     if (wh <= 0) return false;
     const rh = restMap[key] || 0;
-    return (wh - rh) > 0;
+    const lh = leaveHoursMap[key] || 0;
+    return (wh - rh - lh) > 0;
 }
 
 function countWorking(scheduleMap, people, date) {
@@ -812,15 +814,22 @@ async function init() {
         shiftDataMap = {};
         shifts.forEach(s => { shiftDataMap[s.name] = s; });
 
-        // 调整记录：restMap=放休, overtimeMap=加班+换班, leaveDaySet=请假+换休
+        // 调整记录：restMap=放休, overtimeMap=加班+换班, leaveDaySet=全天请假+换休, leaveHoursMap=按小时请假
         restMap = {};
         overtimeMap = {};
         leaveDaySet = new Set();
+        leaveHoursMap = {};
         leaveRecords.forEach(r => {
             const key = r.leave_date + '|' + r.employee_name;
             const rt = r.type || 'overtime';
-            if (rt === 'leave' || rt === '换休') {
+            if (rt === '换休') {
                 leaveDaySet.add(key);
+            } else if (rt === 'leave') {
+                if (r.start_time) {
+                    leaveHoursMap[key] = (leaveHoursMap[key] || 0) + r.hours;
+                } else {
+                    leaveDaySet.add(key);
+                }
             } else if (rt === 'rest') {
                 restMap[key] = (restMap[key] || 0) + r.hours;
             } else if (rt === 'overtime' || rt === '换班') {
