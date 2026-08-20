@@ -533,6 +533,18 @@ def api_employees_list():
     return jsonify([dict(r) for r in rows])
 
 
+@app.route("/api/employees/roster", methods=["GET"])
+def api_employees_roster():
+    """当前有效员工名单：状态有效且岗位非「其他」"""
+    db = get_db()
+    rows = db.execute(
+        "SELECT dongfu_id, name, team, sub_team, position "
+        "FROM employees WHERE status='active' AND position != '其他' "
+        "ORDER BY team, name"
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
 @app.route("/api/employees", methods=["POST"])
 def api_employees_create():
     data = request.json
