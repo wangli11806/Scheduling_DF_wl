@@ -199,6 +199,7 @@ PUT    /api/employees/<id>               编辑（支持部分更新）
 DELETE /api/employees/<id>               删除（有下级时拒绝）
 POST   /api/employees/import            批量导入（.xlsx）
 GET    /api/employees/template           下载导入模板
+GET    /api/employees/roster            有效员工名单（排除岗位「其他」）
 ```
 
 ### 班次
