@@ -116,17 +116,6 @@
         .btn-primary:hover { background: #1e2f4a; }
         .btn-sm { padding: 5px 12px; font-size: 0.85rem; }
 
-        .radio-group {
-            display: inline-flex; gap: 2px; background: #eef2ff; border-radius: 60px; padding: 3px;
-        }
-        .radio-opt {
-            display: inline-flex; align-items: center; padding: 5px 14px;
-            border-radius: 40px; font-size: 0.88rem; font-weight: 500; color: #64748b;
-            cursor: pointer; transition: all 0.15s; user-select: none;
-        }
-        .radio-opt:has(input:checked) { background: white; color: #1e3a5f; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-        .radio-opt input { display: none; }
-
         /* 安排表格 */
         .assign-table-wrapper {
             overflow-x: auto; border-radius: 16px; background: white;
@@ -291,15 +280,6 @@
                             <button class="btn btn-sm btn-primary" id="filterTeamOk">确定</button>
                         </div>
                     </div>
-                </div>
-            </div>
-            <div class="filter-field" style="width:auto;flex:none;">
-                <label>岗位筛选</label>
-                <div class="radio-group" id="filterPosition">
-                    <label class="radio-opt"><input type="radio" name="filterPos" value=""> 全部</label>
-                    <label class="radio-opt"><input type="radio" name="filterPos" value="客服" checked> 客服</label>
-                    <label class="radio-opt"><input type="radio" name="filterPos" value="主管"> 主管</label>
-                    <label class="radio-opt"><input type="radio" name="filterPos" value="新人"> 新人</label>
                 </div>
             </div>
         </div>
@@ -529,11 +509,8 @@ function renderTable() {
     const dateStr = formatDate(currentDate);
     let working = getWorkingEmployees();
 
-    // 岗位筛选
-    const filterPos = document.querySelector('input[name="filterPos"]:checked').value;
-    if (filterPos) {
-        working = working.filter(e => e.position === filterPos);
-    }
+    // 默认只展示客服 + 新人岗位
+    working = working.filter(e => e.position === '客服' || e.position === '新人');
 
     // 按班次筛选
     if (filterSelectedShifts.length > 0 && filterSelectedShifts.length < shiftOptions.length) {
@@ -750,9 +727,7 @@ function selectCascadeSlot(cs, value) {
 function updateSummaryRow() {
     const working = getWorkingEmployees();
     const dateStr = formatDate(currentDate);
-    const filterPos = document.querySelector('input[name="filterPos"]:checked').value;
     const filtered = working.filter(e => {
-        if (filterPos && e.position !== filterPos) return false;
         if (filterSelectedShifts.length > 0 && filterSelectedShifts.length < shiftOptions.length) {
             if (!filterSelectedShifts.includes(getShift(dateStr, e.name))) return false;
         }
@@ -956,9 +931,6 @@ async function init() {
 
     document.getElementById("prevDateBtn").addEventListener("click", () => changeDate(-1));
     document.getElementById("nextDateBtn").addEventListener("click", () => changeDate(1));
-    document.querySelectorAll('input[name="filterPos"]').forEach(radio => {
-        radio.addEventListener('change', () => renderTable());
-    });
 
     document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
