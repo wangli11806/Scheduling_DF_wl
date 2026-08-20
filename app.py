@@ -538,7 +538,7 @@ def api_employees_roster():
     """当前有效员工名单：状态有效且岗位非「其他」（token 鉴权，供外部系统调用）"""
     token = request.args.get("token", "")
     cfg = load_auth_config()
-    if not token or token != cfg.get("bot_token", ""):
+    if not token or token != cfg.get("roster_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
     db = get_db()
     rows = db.execute(
