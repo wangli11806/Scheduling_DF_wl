@@ -28,7 +28,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ==================== 鉴权 ====================
 
 AUTH_FILE = os.path.join(BASE_DIR, "auth_config.json")
-AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout", "/api/bot/schedules"]
+AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout", "/api/bot/schedules", "/api/employees/roster"]
 
 
 def load_auth_config():
@@ -535,7 +535,11 @@ def api_employees_list():
 
 @app.route("/api/employees/roster", methods=["GET"])
 def api_employees_roster():
-    """当前有效员工名单：状态有效且岗位非「其他」"""
+    """当前有效员工名单：状态有效且岗位非「其他」（token 鉴权，供外部系统调用）"""
+    token = request.args.get("token", "")
+    cfg = load_auth_config()
+    if not token or token != cfg.get("bot_token", ""):
+        return jsonify({"ok": False, "error": "token 无效"}), 403
     db = get_db()
     rows = db.execute(
         "SELECT dongfu_id, name, team, sub_team, position "
