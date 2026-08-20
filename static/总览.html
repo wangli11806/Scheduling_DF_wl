@@ -437,7 +437,7 @@ async function renderCalendar(employees) {
     const schedMap = {};
     monthSchedules.forEach(s => { schedMap[s.schedule_date + '|' + s.employee_name] = s.shift_name; });
 
-    const agents = employees.filter(e => e.position === '客服');
+    const agents = employees.filter(e => ['客服','新人'].includes(e.position));
     const today = todayStr();
 
     // 每个日期有多少客服上班
@@ -843,7 +843,7 @@ async function init() {
 
         // 主管 vs 客服
         const supervisors = employees.filter(e => e.position === '主管');
-        const agents = employees.filter(e => e.position === '客服');
+        const agents = employees.filter(e => ['客服','新人'].includes(e.position));
 
         // 值班主管：今天有效上班
         const dutySupervisors = supervisors.filter(s => {

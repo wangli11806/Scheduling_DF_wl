@@ -79,7 +79,7 @@ python app.py
 | id | TEXT PK | EMP001（自增） |
 | name | TEXT UNIQUE | 员工姓名 |
 | team | TEXT | 在线组/热线组/售后组/综合组/VIP组/质检组/支持组 |
-| position | TEXT | 客服/主管/其他 |
+| position | TEXT | 客服/主管/新人/其他 |
 | supervisor | TEXT | 上级姓名（选填） |
 | dongfu_id | TEXT | 东福工号（选填） |
 | work_hour_system | TEXT | 标准工时制/综合计算工时制（选填） |

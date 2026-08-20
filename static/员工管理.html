@@ -242,6 +242,7 @@
                 <option value="">请选择岗位</option>
                 <option value="客服">客服</option>
                 <option value="主管">主管</option>
+                <option value="新人">新人</option>
                 <option value="其他">其他</option>
             </select>
         </div>
@@ -314,7 +315,7 @@
 <script>
     // ========== 数据层（后端 API） ==========
     const teamOptions = ["在线组", "热线组", "售后组", "综合组", "VIP组", "质检组", "支持组"];
-    const positionOptions = ["客服", "主管", "其他"];
+    const positionOptions = ["客服", "主管", "新人", "其他"];
 
     async function apiPut(url, data) {
         const res = await fetch(API_BASE + url, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
