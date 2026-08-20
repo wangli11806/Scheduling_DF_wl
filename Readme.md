@@ -219,6 +219,7 @@ POST   /api/schedules/batch              批量新增/更新 {entries: [{date, e
 POST   /api/schedules/import             Excel 导入（列表格式：日期/员工/班次三列）
 POST   /api/schedules/import-matrix      Excel 导入（矩阵格式：行为员工、列为日期）
 GET    /api/schedules/export             Excel 导出
+GET    /api/schedules/external?token=<TOKEN>&start=&end=  对外排班查询（token 鉴权，供外部系统调用）
 ```
 
 矩阵模板：第一列员工姓名，第一行日期（支持 YYYY-MM-DD、M/D、M月D日、D日 等格式），单元格填班次代码（A=A班, B=B班, …，休=休息, 假=请假, 空=休息）。
@@ -366,6 +367,37 @@ GET    /api/bot/schedules?token=<TOKEN>&date=YYYY-MM-DD&employee=张三
 |------|------|------|
 | working | bool | 有效上班状态。全天休假/换休为 false；否则 `(班次工时 + 加班/换班工时) - (换休工时) - (按小时休假工时) > 0` 为 true |
 | rest_hours | float | 当日换休总小时数，用于了解不上班的原因 |
+
+### 对外排班查询（Token 鉴权）
+
+按排班日期范围返回排班记录及员工信息，供外部系统调用。Token 存在 `auth_config.json` 的 `schedules_token` 字段（独立于 `bot_token`、`roster_token`）。
+
+```
+GET    /api/schedules/external?token=<TOKEN>&start=YYYY-MM-DD&end=YYYY-MM-DD
+```
+
+参数：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| token | 是 | `auth_config.json` 中的 `schedules_token` |
+| start | 是 | 排班开始日期 YYYY-MM-DD |
+| end | 是 | 排班结束日期 YYYY-MM-DD |
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "count": 55,
+  "data": [
+    {"日期": "2026-05-01", "东福工号": "SH-1744", "姓名": "徐文妍", "团队": "VIP组", "子团队": "", "班次": "E班"},
+    {"日期": "2026-05-01", "东福工号": "SH-3803", "姓名": "朱灿灿", "团队": "VIP组", "子团队": "", "班次": "休息"}
+  ]
+}
+```
+
+返回全部员工（含离职）的排班记录；员工已删除或不在花名册时，工号/团队/子团队为空字符串。
 
 ---
 
