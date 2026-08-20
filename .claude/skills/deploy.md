@@ -37,7 +37,7 @@ env = os.environ.copy()
 env['SSH_ASKPASS'] = '/d/askpass.sh'
 env['SSH_ASKPASS_REQUIRE'] = 'force'
 
-cmd = "cd /opt/schedule && git pull origin main && pip install -r requirements.txt && systemctl restart schedule && sleep 2 && systemctl status schedule --no-pager -l | head -5"
+cmd = "cd /opt/schedule && git pull origin main && venv/bin/pip install -r requirements.txt && systemctl restart schedule && sleep 2 && systemctl status schedule --no-pager -l | head -5"
 
 result = subprocess.run(
     ['ssh', '-o', 'StrictHostKeyChecking=no',
