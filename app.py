@@ -28,7 +28,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ==================== 鉴权 ====================
 
 AUTH_FILE = os.path.join(BASE_DIR, "auth_config.json")
-AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout", "/api/bot/schedules", "/api/employees/roster"]
+AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout", "/api/bot/schedules", "/api/employees/roster", "/api/schedules/external"]
 
 
 def load_auth_config():
@@ -890,6 +890,41 @@ def api_schedules_list():
             "SELECT schedule_date, employee_name, shift_name FROM schedules ORDER BY schedule_date, employee_name"
         ).fetchall()
     return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/schedules/external", methods=["GET"])
+def api_schedules_external():
+    """对外排班查询接口：按日期范围返回排班+员工信息，token 鉴权"""
+    token = request.args.get("token", "")
+    cfg = load_auth_config()
+    if not token or token != cfg.get("schedules_token", ""):
+        return jsonify({"ok": False, "error": "token 无效"}), 403
+
+    start = (request.args.get("start") or "").strip()
+    end = (request.args.get("end") or "").strip()
+    if not start or not end:
+        return jsonify({"ok": False, "error": "缺少 start 或 end 参数"}), 400
+
+    db = get_db()
+    rows = db.execute("""
+        SELECT s.schedule_date, s.employee_name, s.shift_name,
+               e.dongfu_id, e.team, e.sub_team
+        FROM schedules s
+        LEFT JOIN employees e ON e.name = s.employee_name
+        WHERE s.schedule_date >= ? AND s.schedule_date <= ?
+        ORDER BY s.schedule_date, e.team, s.employee_name
+    """, (start, end)).fetchall()
+
+    data = [{
+        "日期": r["schedule_date"],
+        "东福工号": r["dongfu_id"] or "",
+        "姓名": r["employee_name"],
+        "团队": r["team"] or "",
+        "子团队": r["sub_team"] or "",
+        "班次": r["shift_name"],
+    } for r in rows]
+
+    return jsonify({"ok": True, "count": len(data), "data": data})
 
 
 @app.route("/api/schedule/lookup", methods=["GET"])
