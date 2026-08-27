@@ -1053,6 +1053,10 @@ def api_schedules_import_matrix():
     # 解析表头：第一列是"姓名"，其余列是日期
     raw_header = rows[0]
     header = [str(c or "").strip() for c in raw_header]
+    import re
+    for _c in header[1:]:
+        if re.match(r"^\d{1,2}日$", _c) or re.match(r"^\d{1,2}$", _c):
+            return jsonify({"error": "检测到旧版模板（表头只有日期、缺少月份）。请重新下载模板（表头已改为完整日期，如 2026-09-01）后再填写上传"}), 400
     dates = []
     for i in range(1, len(raw_header)):
         # 优先用原始值解析（可能是 datetime 对象），字符串版本作为备选
@@ -1574,6 +1578,10 @@ def api_raw_schedules_import_matrix():
 
     raw_header = rows[0]
     header = [str(c or "").strip() for c in raw_header]
+    import re
+    for _c in header[1:]:
+        if re.match(r"^\d{1,2}日$", _c) or re.match(r"^\d{1,2}$", _c):
+            return jsonify({"error": "检测到旧版模板（表头只有日期、缺少月份）。请重新下载模板（表头已改为完整日期，如 2026-09-01）后再填写上传"}), 400
     dates = []
     for i in range(1, len(raw_header)):
         d = _parse_date(raw_header[i]) or _parse_date(header[i])

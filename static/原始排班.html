@@ -375,6 +375,10 @@
         <p style="font-size:0.85rem; color:#64748b; margin-bottom:20px; text-align:left; padding-left:20px;">
             ② <strong>列表模板</strong>：包含 日期、员工、班次 三列
         </p>
+        <div style="margin-bottom:16px;">
+            <label style="font-size:0.85rem; color:#64748b; margin-right:8px;">目标月份：</label>
+            <input type="month" id="templateMonth" style="padding:6px 10px; border:1px solid #cbd5e1; border-radius:8px;">
+        </div>
         <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <button class="btn btn-outline" id="downloadTemplateBtn">下载矩阵模板</button>
             <button class="btn btn-primary" id="selectFileBtn">选择文件上传</button>
@@ -529,20 +533,25 @@
     }
 
     function downloadTemplate() {
-        // 矩阵格式模板：第一列为员工姓名，第一行为日期
+        // 矩阵格式模板：第一列为员工姓名，第一行为日期（完整日期，避免跨月被误判）
+        const m = document.getElementById("templateMonth");
+        const now = new Date();
+        const ym = (m && m.value) ? m.value : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const [year, month] = ym.split('-').map(Number);
+        const totalDays = new Date(year, month, 0).getDate();
         const header = ["姓名"];
-        for (let d = 1; d <= 31; d++) header.push(`${d}日`);
+        for (let d = 1; d <= totalDays; d++) header.push(`${ym}-${String(d).padStart(2, '0')}`);
         const rows = [header];
         const sampleEmps = employees.length > 0
             ? employees.map(e => e.name).slice(0, 5)
             : ["张三", "李四", "王芳", "赵磊", "陈敏"];
         sampleEmps.forEach(name => {
             const row = [name];
-            for (let d = 0; d < 31; d++) row.push("");
+            for (let d = 0; d < totalDays; d++) row.push("");
             rows.push(row);
         });
         const ws = XLSX.utils.aoa_to_sheet(rows);
-        ws['!cols'] = [{wch: 10}].concat(Array(31).fill({wch: 5}));
+        ws['!cols'] = [{wch: 10}].concat(Array(totalDays).fill({wch: 5}));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "排班表");
         XLSX.writeFile(wb, "原始排班导入模板.xlsx");
@@ -1003,6 +1012,9 @@
 
     function openAddModal() {
         document.getElementById("addModal").classList.add("active");
+        const t = new Date();
+        const m = document.getElementById("templateMonth");
+        if (m && !m.value) m.value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
     }
 
     function closeAddModal() {
