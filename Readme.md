@@ -399,6 +399,86 @@ GET    /api/schedules/external?token=<TOKEN>&start=YYYY-MM-DD&end=YYYY-MM-DD
 
 返回全部员工（含离职）的排班记录；员工已删除或不在花名册时，工号/团队/子团队为空字符串。
 
+### 用餐安排查询（Token 鉴权）
+
+按日期返回员工当天的用餐安排（午餐/晚餐时段及时长），供外部机器人调用。Token 存在 `auth_config.json` 的 `meal_token` 字段（独立于 `bot_token`、`roster_token`、`schedules_token`）。
+
+```
+GET    /api/bot/meals?token=<TOKEN>&date=YYYY-MM-DD
+```
+
+参数：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| token | 是 | `auth_config.json` 中的 `meal_token` |
+| date | 是 | 日期 YYYY-MM-DD |
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "date": "2026-09-02",
+  "count": 20,
+  "meals": [
+    {"date": "2026-09-02", "employee_id": "SH-3095", "employee_name": "唐俊", "team": "售后组",
+     "lunch": {"start_time": "12:00", "end_time": "13:00", "duration_minutes": 60},
+     "dinner": null},
+    {"date": "2026-09-02", "employee_id": "SH-5028", "employee_name": "张文俊", "team": "售后组",
+     "lunch": {"start_time": "13:30", "end_time": "14:00", "duration_minutes": 30},
+     "dinner": {"start_time": "19:30", "end_time": "20:00", "duration_minutes": 30}}
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| employee_id | string | 员工东福工号（`dongfu_id`），无则为空字符串 |
+| lunch / dinner | object | 午餐/晚餐时段，`{start_time, end_time, duration_minutes}`；当天未安排该餐则为 `null` |
+
+仅返回在职员工（`status='active'`）且当天至少安排了一餐的记录。
+
+### 工作安排查询（Token 鉴权）
+
+按日期返回员工当天的工作安排（工作类型），供外部机器人调用。Token 存在 `auth_config.json` 的 `work_token` 字段（独立于 `bot_token`、`roster_token`、`schedules_token`、`meal_token`）。
+
+```
+GET    /api/bot/work-arrangements?token=<TOKEN>&date=YYYY-MM-DD
+```
+
+参数：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| token | 是 | `auth_config.json` 中的 `work_token` |
+| date | 是 | 日期 YYYY-MM-DD |
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "date": "2026-09-07",
+  "count": 6,
+  "works": [
+    {"date": "2026-09-07", "employee_id": "SH-3595", "employee_name": "李娜", "team": "热线组",
+     "work_types": ["热线"]}
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| employee_id | string | 员工东福工号（`dongfu_id`），无则为空字符串 |
+| work_types | array | 工作类型数组，如 `["热线"]`、`["工单", "反向工单"]` |
+
+仅返回在职员工（`status='active'`）且当天有工作类型的记录。
+
 ---
 
 ## 页面间跳转
