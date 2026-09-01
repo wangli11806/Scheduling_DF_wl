@@ -28,7 +28,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ==================== 鉴权 ====================
 
 AUTH_FILE = os.path.join(BASE_DIR, "auth_config.json")
-AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout", "/api/bot/schedules", "/api/employees/roster", "/api/schedules/external"]
+AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout", "/api/bot/schedules", "/api/bot/meals", "/api/bot/work-arrangements", "/api/employees/roster", "/api/schedules/external"]
 
 
 def load_auth_config():
@@ -256,6 +256,109 @@ def api_bot_schedules():
         "count": len(schedules),
         "schedules": schedules
     })
+
+
+def _parse_meal_slot(slot):
+    """解析用餐时段 '12:30-13:00' → {start_time, end_time, duration_minutes}，空返回 None"""
+    slot = (slot or "").strip()
+    if not slot or "-" not in slot:
+        return None
+    parts = slot.split("-")
+    if len(parts) != 2:
+        return None
+    start = parts[0].strip()
+    end = parts[1].strip()
+    try:
+        sh, sm = start.split(":")
+        eh, em = end.split(":")
+        s = int(sh) * 60 + int(sm)
+        e = int(eh) * 60 + int(em)
+    except (ValueError, TypeError):
+        return None
+    if e < s:
+        e += 24 * 60
+    return {"start_time": start, "end_time": end, "duration_minutes": e - s}
+
+
+@app.route("/api/bot/meals")
+def api_bot_meals():
+    """用餐安排查询接口（供外部机器人调用，token 鉴权）"""
+    token = request.args.get("token", "")
+    cfg = load_auth_config()
+    if not token or token != cfg.get("meal_token", ""):
+        return jsonify({"ok": False, "error": "token 无效"}), 403
+
+    date_str = request.args.get("date", "").strip()
+    if not date_str:
+        return jsonify({"ok": False, "error": "缺少日期参数"}), 400
+
+    db = get_db()
+    rows = db.execute("""
+        SELECT a.date, a.employee_name, a.lunch_slot, a.dinner_slot,
+               e.dongfu_id, e.team
+        FROM daily_assignments a
+        LEFT JOIN employees e ON e.name = a.employee_name
+        WHERE a.date = ? AND e.status = 'active'
+        ORDER BY e.team, a.employee_name
+    """, [date_str]).fetchall()
+
+    meals = []
+    for r in rows:
+        lunch = _parse_meal_slot(r["lunch_slot"])
+        dinner = _parse_meal_slot(r["dinner_slot"])
+        if not lunch and not dinner:
+            continue
+        meals.append({
+            "date": r["date"],
+            "employee_id": r["dongfu_id"] or "",
+            "employee_name": r["employee_name"],
+            "team": r["team"] or "",
+            "lunch": lunch,
+            "dinner": dinner,
+        })
+
+    return jsonify({"ok": True, "date": date_str, "count": len(meals), "meals": meals})
+
+
+@app.route("/api/bot/work-arrangements")
+def api_bot_work_arrangements():
+    """工作安排查询接口（供外部机器人调用，token 鉴权）"""
+    token = request.args.get("token", "")
+    cfg = load_auth_config()
+    if not token or token != cfg.get("work_token", ""):
+        return jsonify({"ok": False, "error": "token 无效"}), 403
+
+    date_str = request.args.get("date", "").strip()
+    if not date_str:
+        return jsonify({"ok": False, "error": "缺少日期参数"}), 400
+
+    db = get_db()
+    rows = db.execute("""
+        SELECT a.date, a.employee_name, a.work_types,
+               e.dongfu_id, e.team
+        FROM daily_assignments a
+        LEFT JOIN employees e ON e.name = a.employee_name
+        WHERE a.date = ? AND e.status = 'active'
+        ORDER BY e.team, a.employee_name
+    """, [date_str]).fetchall()
+
+    works = []
+    for r in rows:
+        try:
+            work_types = json.loads(r["work_types"] or "[]")
+        except (ValueError, TypeError):
+            work_types = []
+        if not work_types:
+            continue
+        works.append({
+            "date": r["date"],
+            "employee_id": r["dongfu_id"] or "",
+            "employee_name": r["employee_name"],
+            "team": r["team"] or "",
+            "work_types": work_types,
+        })
+
+    return jsonify({"ok": True, "date": date_str, "count": len(works), "works": works})
 
 
 def count_working_days(year, month):
