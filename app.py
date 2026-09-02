@@ -258,6 +258,18 @@ def api_bot_schedules():
     })
 
 
+def _log_bot_token(path, token):
+    """临时诊断：记录外部机器人请求的 token 原始字节（排查 token 不匹配）"""
+    try:
+        p = os.path.join(BASE_DIR, "logs", "bot_token_debug.log")
+        with open(p, "a", encoding="utf-8") as f:
+            f.write("%s | %s | ip=%s | len=%d | token=%r\n" % (
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                path, request.remote_addr, len(token), token))
+    except Exception:
+        pass
+
+
 def _parse_meal_slot(slot):
     """解析用餐时段 '12:30-13:00' → {start_time, end_time, duration_minutes}，空返回 None"""
     slot = (slot or "").strip()
@@ -284,6 +296,7 @@ def _parse_meal_slot(slot):
 def api_bot_meals():
     """用餐安排查询接口（供外部机器人调用，token 鉴权）"""
     token = request.args.get("token", "")
+    _log_bot_token("/api/bot/meals", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("meal_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
@@ -324,6 +337,7 @@ def api_bot_meals():
 def api_bot_work_arrangements():
     """工作安排查询接口（供外部机器人调用，token 鉴权）"""
     token = request.args.get("token", "")
+    _log_bot_token("/api/bot/work-arrangements", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("work_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
