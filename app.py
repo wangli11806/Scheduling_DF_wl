@@ -160,6 +160,7 @@ def api_auth_logout():
 @app.route("/api/bot/schedules")
 def api_bot_schedules():
     token = request.args.get("token", "")
+    _log_external_api("/api/bot/schedules", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("bot_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
@@ -284,6 +285,7 @@ def _parse_meal_slot(slot):
 def api_bot_meals():
     """用餐安排查询接口（供外部机器人调用，token 鉴权）"""
     token = request.args.get("token", "")
+    _log_external_api("/api/bot/meals", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("meal_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
@@ -324,6 +326,7 @@ def api_bot_meals():
 def api_bot_work_arrangements():
     """工作安排查询接口（供外部机器人调用，token 鉴权）"""
     token = request.args.get("token", "")
+    _log_external_api("/api/bot/work-arrangements", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("work_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
@@ -397,6 +400,33 @@ def _rotate_log(path):
     try:
         open(path, "w").close()
     except OSError:
+        pass
+
+
+EXTERNAL_API_LOG = os.path.join(BASE_DIR, "logs", "external_api.log")
+
+
+def _mask_token(token):
+    """token 脱敏：保留首尾各4位，中间打码；短 token 只露首尾各1位"""
+    n = len(token)
+    if n > 8:
+        return "%s****%s" % (token[:4], token[-4:])
+    if n > 2:
+        return "%s%s%s" % (token[0], "*" * (n - 2), token[-1])
+    return "*" * n
+
+
+def _log_external_api(path, token):
+    """外部接口调用审计：记录时间/接口/来源IP/脱敏token/长度，超5MB自动轮转"""
+    try:
+        if os.path.exists(EXTERNAL_API_LOG) and os.path.getsize(EXTERNAL_API_LOG) > 5 * 1024 * 1024:
+            os.replace(EXTERNAL_API_LOG, "%s.%s" % (EXTERNAL_API_LOG, datetime.now().strftime("%Y%m%d%H%M%S")))
+        os.makedirs(os.path.dirname(EXTERNAL_API_LOG), exist_ok=True)
+        with open(EXTERNAL_API_LOG, "a", encoding="utf-8") as f:
+            f.write("%s | %s | ip=%s | len=%d | token=%s\n" % (
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                path, request.remote_addr, len(token), _mask_token(token)))
+    except Exception:
         pass
 
 
@@ -640,6 +670,7 @@ def api_employees_list():
 def api_employees_roster():
     """当前有效员工名单：状态有效且岗位非「其他」（token 鉴权，供外部系统调用）"""
     token = request.args.get("token", "")
+    _log_external_api("/api/employees/roster", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("roster_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
@@ -999,6 +1030,7 @@ def api_schedules_list():
 def api_schedules_external():
     """对外排班查询接口：按日期范围返回排班+员工信息，token 鉴权"""
     token = request.args.get("token", "")
+    _log_external_api("/api/schedules/external", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("schedules_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
@@ -2774,6 +2806,7 @@ def _calc_actual_work_hours(db, start_date, end_date, employees):
 def api_actual_work_hours():
     """对外实际工作时长查询接口：按年月（可选东福工号）返回员工实际工作时长，token 鉴权"""
     token = request.args.get("token", "")
+    _log_external_api("/api/actual-work-hours", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("work_hours_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
