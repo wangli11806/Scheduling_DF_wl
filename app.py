@@ -28,7 +28,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ==================== 鉴权 ====================
 
 AUTH_FILE = os.path.join(BASE_DIR, "auth_config.json")
-AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout", "/api/bot/schedules", "/api/bot/meals", "/api/bot/work-arrangements", "/api/employees/roster", "/api/schedules/external"]
+AUTH_EXEMPT = ["/login", "/api/auth/login", "/api/auth/logout", "/api/bot/schedules", "/api/bot/meals", "/api/bot/work-arrangements", "/api/employees/roster", "/api/schedules/external", "/api/actual-work-hours"]
 
 
 def load_auth_config():
@@ -258,18 +258,6 @@ def api_bot_schedules():
     })
 
 
-def _log_bot_token(path, token):
-    """临时诊断：记录外部机器人请求的 token 原始字节（排查 token 不匹配）"""
-    try:
-        p = os.path.join(BASE_DIR, "logs", "bot_token_debug.log")
-        with open(p, "a", encoding="utf-8") as f:
-            f.write("%s | %s | ip=%s | len=%d | token=%r\n" % (
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                path, request.remote_addr, len(token), token))
-    except Exception:
-        pass
-
-
 def _parse_meal_slot(slot):
     """解析用餐时段 '12:30-13:00' → {start_time, end_time, duration_minutes}，空返回 None"""
     slot = (slot or "").strip()
@@ -296,7 +284,6 @@ def _parse_meal_slot(slot):
 def api_bot_meals():
     """用餐安排查询接口（供外部机器人调用，token 鉴权）"""
     token = request.args.get("token", "")
-    _log_bot_token("/api/bot/meals", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("meal_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
@@ -337,7 +324,6 @@ def api_bot_meals():
 def api_bot_work_arrangements():
     """工作安排查询接口（供外部机器人调用，token 鉴权）"""
     token = request.args.get("token", "")
-    _log_bot_token("/api/bot/work-arrangements", token)
     cfg = load_auth_config()
     if not token or token != cfg.get("work_token", ""):
         return jsonify({"ok": False, "error": "token 无效"}), 403
@@ -2747,6 +2733,93 @@ def api_assignment_stats_export():
 
 # ==================== 月度时长统计 API ====================
 
+def _calc_actual_work_hours(db, start_date, end_date, employees):
+    """计算每个员工当月实际工作时长：排班班次工时 + 按小时加班 - 请假/放休扣减"""
+    shift_hours = {r["name"]: (r["work_hours"] or 0) for r in db.execute("SELECT name, work_hours FROM shifts").fetchall()}
+
+    sched = {}
+    for r in db.execute(
+        "SELECT employee_name, schedule_date, shift_name FROM schedules WHERE schedule_date >= ? AND schedule_date <= ?",
+        (start_date, end_date)
+    ).fetchall():
+        sched.setdefault(r["employee_name"], {})[r["schedule_date"]] = r["shift_name"]
+
+    leave = {}
+    for r in db.execute(
+        "SELECT employee_name, leave_date, type, hours, overtime_type FROM leave_records WHERE leave_date >= ? AND leave_date <= ?",
+        (start_date, end_date)
+    ).fetchall():
+        leave.setdefault(r["employee_name"], {}).setdefault(r["leave_date"], []).append(r)
+
+    result = {}
+    for emp in employees:
+        name = emp["name"]
+        dates = set(sched.get(name, {}).keys()) | set(leave.get(name, {}).keys())
+        total = 0.0
+        for d in dates:
+            sched_wh = shift_hours.get(sched.get(name, {}).get(d, ""), 0)
+            leave_deduct = 0.0
+            hourly_overtime = 0.0
+            for lr in leave.get(name, {}).get(d, []):
+                if lr["type"] in ("leave", "rest"):
+                    leave_deduct += lr["hours"] or 0
+                elif lr["type"] == "overtime" and lr["overtime_type"] in ("", "按小时"):
+                    hourly_overtime += lr["hours"] or 0
+            total += max(0.0, sched_wh - leave_deduct) + hourly_overtime
+        result[name] = round(total, 1)
+    return result
+
+
+@app.route("/api/actual-work-hours", methods=["GET"])
+def api_actual_work_hours():
+    """对外实际工作时长查询接口：按年月（可选东福工号）返回员工实际工作时长，token 鉴权"""
+    token = request.args.get("token", "")
+    cfg = load_auth_config()
+    if not token or token != cfg.get("work_hours_token", ""):
+        return jsonify({"ok": False, "error": "token 无效"}), 403
+
+    month = (request.args.get("month") or "").strip()
+    if not month:
+        return jsonify({"ok": False, "error": "缺少 month 参数"}), 400
+    try:
+        parts = month.split("-")
+        if len(parts) != 2:
+            raise ValueError
+        year_int = int(parts[0])
+        month_int = int(parts[1])
+        last_day = calendar.monthrange(year_int, month_int)[1]
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "month 参数格式应为 YYYY-MM"}), 400
+
+    start_date = f"{year_int:04d}-{month_int:02d}-01"
+    end_date = f"{year_int:04d}-{month_int:02d}-{last_day}"
+
+    dongfu_id = (request.args.get("dongfu_id") or "").strip()
+
+    db = get_db()
+    query = "SELECT id, name, team, dongfu_id, work_hour_system FROM employees WHERE status='active'"
+    params = []
+    if dongfu_id:
+        query += " AND dongfu_id = ?"
+        params.append(dongfu_id)
+    query += " ORDER BY id"
+    employees = db.execute(query, params).fetchall()
+
+    actual = _calc_actual_work_hours(db, start_date, end_date, employees)
+
+    TEAM_ORDER = ["在线组", "热线组", "售后组", "综合组", "VIP组", "质检组", "支持组"]
+    rows = [{
+        "年月": f"{year_int:04d}-{month_int:02d}",
+        "东福工号": emp["dongfu_id"] or "",
+        "员工姓名": emp["name"],
+        "团队": emp["team"] or "",
+        "实际工作时长": actual.get(emp["name"], 0.0),
+    } for emp in employees]
+    rows.sort(key=lambda r: (TEAM_ORDER.index(r["团队"]) if r["团队"] in TEAM_ORDER else 999, r["员工姓名"]))
+
+    return jsonify({"ok": True, "count": len(rows), "data": rows})
+
+
 @app.route("/api/monthly-hours-stats", methods=["GET"])
 def api_monthly_hours_stats():
     year = request.args.get("year", "")
@@ -2800,6 +2873,8 @@ def api_monthly_hours_stats():
             emp_shifts[emp] = {}
         emp_shifts[emp][shift] = emp_shifts[emp].get(shift, 0) + 1
 
+    actual_hours_map = _calc_actual_work_hours(db, start_date, end_date, employees)
+
     results = []
     for emp in employees:
         name = emp["name"]
@@ -2828,7 +2903,8 @@ def api_monthly_hours_stats():
             "work_system": work_system,
             "scheduled_hours": round(total_hours, 1),
             "system_hours": round(system_hours, 1),
-            "diff": diff
+            "diff": diff,
+            "actual_work_hours": actual_hours_map.get(name, 0.0)
         })
 
     # 返回所有可选团队（用于筛选器）
@@ -2891,6 +2967,8 @@ def api_monthly_hours_stats_export():
             emp_shifts[emp] = {}
         emp_shifts[emp][shift] = emp_shifts[emp].get(shift, 0) + 1
 
+    actual_hours_map = _calc_actual_work_hours(db, start_date, end_date, employees)
+
     TEAM_ORDER = ["在线组","热线组","售后组","综合组","VIP组","质检组","支持组"]
 
     results = []
@@ -2920,7 +2998,8 @@ def api_monthly_hours_stats_export():
             "name": name,
             "scheduled_hours": round(total_hours, 1),
             "system_hours": round(system_hours, 1),
-            "diff": diff
+            "diff": diff,
+            "actual_work_hours": actual_hours_map.get(name, 0.0)
         })
 
     # 排序
@@ -2930,7 +3009,7 @@ def api_monthly_hours_stats_export():
     wb = Workbook()
     ws_sheet = wb.active
     ws_sheet.title = f"{year_int}年{month_int}月时长统计"
-    ws_sheet.append(["所属团队", "东福工号", "员工姓名", "原始排班时长(h)", "工时制度时长(h)", "差额(h)"])
+    ws_sheet.append(["所属团队", "东福工号", "员工姓名", "原始排班时长(h)", "工时制度时长(h)", "差额(h)", "实际工作时长(h)"])
 
     # 团队列颜色
     team_colors = {
@@ -2941,7 +3020,7 @@ def api_monthly_hours_stats_export():
 
     for row in results:
         ws_sheet.append([row["team"], row["dongfu_id"], row["name"],
-                         row["scheduled_hours"], row["system_hours"], row["diff"]])
+                         row["scheduled_hours"], row["system_hours"], row["diff"], row["actual_work_hours"]])
         r = ws_sheet.max_row
         color = team_colors.get(row["team"])
         if color:
@@ -2959,6 +3038,7 @@ def api_monthly_hours_stats_export():
     ws_sheet.column_dimensions["D"].width = 18
     ws_sheet.column_dimensions["E"].width = 18
     ws_sheet.column_dimensions["F"].width = 12
+    ws_sheet.column_dimensions["G"].width = 18
 
     from io import BytesIO
     output = BytesIO()

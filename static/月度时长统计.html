@@ -283,6 +283,7 @@
                         <th class="col-scheduled">原始排班时长(h)<span class="info-icon" data-tip="依据月初原始排班中各班次的天数，累加计算员工当月应工作小时数">i</span></th>
                         <th class="col-system">工时制度时长(h)<span class="info-icon" data-tip="对于标准工时制员工，工时制度时长=当月法定工作日数 × 8h&#10;对于综合计算工时制员工，工时制度时长=167h（法定固定时长）">i</span></th>
                         <th class="col-diff">差额(h)<span class="info-icon" data-tip="工时差额 = 原始排班时长 - 工时制度时长">i</span></th>
+                        <th class="col-scheduled">实际工作时长(h)<span class="info-icon" data-tip="依据排班表当月班次对应工时，叠加排班变更（换班/加班），扣除请假/调休/放休小时数后的实际上班时长">i</span></th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -339,7 +340,7 @@ async function loadData() {
         const tbody = document.getElementById("tableBody");
 
         if (data.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="padding:48px 24px;text-align:center;color:#94a3b8;">暂无数据</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="padding:48px 24px;text-align:center;color:#94a3b8;">暂无数据</td></tr>`;
             return;
         }
 
@@ -359,6 +360,7 @@ async function loadData() {
                 <td>${row.scheduled_hours}</td>
                 <td>${row.system_hours}</td>
                 <td>${renderDiff(row.diff)}</td>
+                <td>${row.actual_work_hours}</td>
             </tr>
         `).join('');
     } catch(e) {

@@ -479,6 +479,42 @@ GET    /api/bot/work-arrangements?token=<TOKEN>&date=YYYY-MM-DD
 
 仅返回在职员工（`status='active'`）且当天有工作类型的记录。
 
+### 实际工作时长查询（Token 鉴权）
+
+按月（可选东福工号）返回员工当月实际工作时长，供外部系统调用。口径：排班班次工时 + 按小时加班 - 请假/调休/放休扣减。Token 存在 `auth_config.json` 的 `work_hours_token` 字段（独立于 `bot_token`、`roster_token`、`schedules_token`、`meal_token`、`work_token`）。
+
+```
+GET    /api/actual-work-hours?token=<TOKEN>&month=YYYY-MM[&dongfu_id=SH-XXXX]
+```
+
+参数：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| token | 是 | `auth_config.json` 中的 `work_hours_token` |
+| month | 是 | 年月 YYYY-MM |
+| dongfu_id | 否 | 东福工号，如 `SH-4909`；传了只返回该员工，不传返回全部在职员工 |
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "count": 1,
+  "data": [
+    {"年月": "2026-07", "东福工号": "SH-4584", "员工姓名": "刘平安", "团队": "在线组", "实际工作时长": 176.0}
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| 实际工作时长 | float | 当月实际上班小时数，单位 h，保留 1 位小数 |
+
+仅返回在职员工（`status='active'`）。
+
 ---
 
 ## 页面间跳转
