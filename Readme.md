@@ -513,7 +513,7 @@ GET    /api/actual-work-hours?token=<TOKEN>&month=YYYY-MM[&dongfu_id=SH-XXXX]
 |------|------|------|
 | 实际工作时长 | float | 当月实际上班小时数，单位 h，保留 1 位小数 |
 
-仅返回在职员工（`status='active'`）。
+返回当月有排班/调整记录的员工（含已离职、失效员工；已彻底删除的员工只返回姓名与实际时长，工号/团队为空）。
 
 ---
 

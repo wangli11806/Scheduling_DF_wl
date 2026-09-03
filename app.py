@@ -2797,13 +2797,41 @@ def api_actual_work_hours():
     dongfu_id = (request.args.get("dongfu_id") or "").strip()
 
     db = get_db()
-    query = "SELECT id, name, team, dongfu_id, work_hour_system FROM employees WHERE status='active'"
-    params = []
+
+    # 当月有排班或调整记录的员工名集合（含已离职/已删除员工）
+    names = set()
+    for r in db.execute(
+        "SELECT DISTINCT employee_name FROM schedules WHERE schedule_date >= ? AND schedule_date <= ?",
+        (start_date, end_date)
+    ).fetchall():
+        names.add(r["employee_name"])
+    for r in db.execute(
+        "SELECT DISTINCT employee_name FROM leave_records WHERE leave_date >= ? AND leave_date <= ?",
+        (start_date, end_date)
+    ).fetchall():
+        names.add(r["employee_name"])
+
+    if not names:
+        return jsonify({"ok": True, "count": 0, "data": []})
+
+    ph = ",".join("?" for _ in names)
+    emp_rows = db.execute(
+        f"SELECT id, name, team, dongfu_id, work_hour_system FROM employees WHERE name IN ({ph})",
+        list(names)
+    ).fetchall()
+    emp_map = {r["name"]: r for r in emp_rows}
+
+    employees = []
+    for name in names:
+        if name in emp_map:
+            employees.append(emp_map[name])
+        else:
+            employees.append({"id": None, "name": name, "team": "", "dongfu_id": "", "work_hour_system": ""})
+
     if dongfu_id:
-        query += " AND dongfu_id = ?"
-        params.append(dongfu_id)
-    query += " ORDER BY id"
-    employees = db.execute(query, params).fetchall()
+        employees = [e for e in employees if (e["dongfu_id"] or "") == dongfu_id]
+
+    employees.sort(key=lambda e: e["name"])
 
     actual = _calc_actual_work_hours(db, start_date, end_date, employees)
 
