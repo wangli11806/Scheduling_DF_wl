@@ -37,7 +37,7 @@ python app.py
 
 ```
 排班系统/
-├── app.py                  # Flask 后端（API + 数据库 + 鉴权 + 月度排班）
+├── app.py                  # Flask 后端（API + 数据库 + 鉴权）
 ├── requirements.txt        # Python 依赖
 ├── schedule.service        # Linux systemd 服务配置
 ├── schedule.db             # SQLite 数据库（自动生成，不入 git）
@@ -49,7 +49,6 @@ python app.py
 │   ├── 总览.html           # 总览看板（/overview）
 │   ├── 排班表.html         # 排班表（日/周/月视图）（/schedule）
 │   ├── 排班表_移动端.html  # 排班表移动端（/schedule-mobile）
-│   ├── 月度排班.html       # 月度排班（/monthly-schedule）
 │   ├── 原始排班.html       # 原始排班表（/raw-schedule）
 │   ├── 工作安排.html       # 工作安排（/work-arrangement）
 │   ├── 排班调整.html       # 排班调整（/schedule-adjustment）
@@ -120,19 +119,6 @@ python app.py
 | UNIQUE(schedule_date, employee_name) | | 每人每天只能有一条 |
 
 > 原始排班支持独立管理，批量操作后**自动单向同步**到排班表。
-
-### monthly_schedules（月度排班表）
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INTEGER PK | 自增 |
-| schedule_date | TEXT | 日期 YYYY-MM-DD |
-| employee_name | TEXT | 员工姓名 |
-| shift_name | TEXT | 班次名称（仅 A班/B班/C班） |
-| finalized | INTEGER | 是否已最终保存（0/1） |
-| UNIQUE(schedule_date, employee_name) | | 每人每天只能有一条 |
-
-> 月度排班按月编辑，最终保存（finalize）后锁定当月不可修改，并将数据导入 `raw_schedules` 和 `schedules` 两张表。
 
 ### daily_assignments（工作安排表）
 
@@ -233,19 +219,6 @@ POST   /api/raw-schedules/import         Excel 导入（列表格式）
 POST   /api/raw-schedules/import-matrix  Excel 导入（矩阵格式）
 GET    /api/raw-schedules/export         Excel 导出
 ```
-
-### 月度排班
-
-```
-GET    /api/monthly-schedules?year_month=YYYY-MM     查询某月全部月度排班（含 finalized 标记）
-POST   /api/monthly-schedules                       保存/删除单个单元格班次 {schedule_date, employee_name, shift_name}
-POST   /api/monthly-schedules/finalize              最终保存 {year_month}，导入 raw_schedules 并锁定
-GET    /api/monthly-schedules/export?year_month=      Excel 导出（样式与页面一致）
-```
-
-- 班次仅支持 `A班`/`B班`/`C班`；`shift_name` 为空则删除该单元格记录
-- 已 finalize 的月份不可再修改，需重新编辑时需先解除锁定
-- finalize 会删除当月已有 `raw_schedules`/`schedules` 后重新导入，并标记 `finalized=1`
 
 ### 工作安排
 

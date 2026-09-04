@@ -92,11 +92,6 @@ def schedule_mobile_page():
     return app.send_static_file("排班表_移动端.html")
 
 
-@app.route("/monthly-schedule")
-def monthly_schedule_page():
-    return app.send_static_file("月度排班.html")
-
-
 @app.route("/raw-schedule")
 def raw_schedule_page():
     return app.send_static_file("原始排班.html")
@@ -516,18 +511,6 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_raw_schedules_date ON raw_schedules(schedule_date);
         CREATE INDEX IF NOT EXISTS idx_raw_schedules_emp  ON raw_schedules(employee_name);
 
-        CREATE TABLE IF NOT EXISTS monthly_schedules (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            schedule_date  TEXT NOT NULL,
-            employee_name  TEXT NOT NULL,
-            shift_name     TEXT NOT NULL,
-            finalized      INTEGER DEFAULT 0,
-            created_at     TEXT DEFAULT (datetime('now','localtime')),
-            updated_at     TEXT DEFAULT (datetime('now','localtime')),
-            UNIQUE(schedule_date, employee_name)
-        );
-        CREATE INDEX IF NOT EXISTS idx_monthly_schedules_date ON monthly_schedules(schedule_date);
-
         CREATE TABLE IF NOT EXISTS daily_assignments (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             date           TEXT NOT NULL,
@@ -762,7 +745,6 @@ def api_employees_update(emp_id):
         db.execute("UPDATE employees SET supervisor=? WHERE supervisor=?", (name, old_name))
         db.execute("UPDATE schedules SET employee_name=? WHERE employee_name=?", (name, old_name))
         db.execute("UPDATE raw_schedules SET employee_name=? WHERE employee_name=?", (name, old_name))
-        db.execute("UPDATE monthly_schedules SET employee_name=? WHERE employee_name=?", (name, old_name))
         db.execute("UPDATE daily_assignments SET employee_name=? WHERE employee_name=?", (name, old_name))
         db.execute("UPDATE leave_records SET employee_name=? WHERE employee_name=?", (name, old_name))
         db.execute("UPDATE swap_records SET person_a=? WHERE person_a=?", (name, old_name))
@@ -988,7 +970,6 @@ def api_shifts_update(shift_id):
     if old_name != name:
         db.execute("UPDATE schedules SET shift_name=? WHERE shift_name=?", (name, old_name))
         db.execute("UPDATE raw_schedules SET shift_name=? WHERE shift_name=?", (name, old_name))
-        db.execute("UPDATE monthly_schedules SET shift_name=? WHERE shift_name=?", (name, old_name))
         db.execute("UPDATE swap_records SET shift_a=? WHERE shift_a=?", (name, old_name))
         db.execute("UPDATE swap_records SET shift_b=? WHERE shift_b=?", (name, old_name))
     db.commit()
@@ -1344,241 +1325,6 @@ def api_schedules_export():
     output.seek(0)
     return send_file(output, as_attachment=True, download_name="排班数据.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-
-# ==================== 月度排班 API ====================
-
-@app.route("/api/monthly-schedules")
-def api_monthly_schedules_list():
-    """查询指定月份的所有月度排班记录"""
-    year_month = request.args.get("year_month", "")
-    try:
-        y, m = year_month.split("-")
-        y, m = int(y), int(m)
-    except ValueError:
-        return jsonify({"ok": False, "error": "参数 year_month 格式错误，需为 YYYY-MM"}), 400
-    start_date = f"{y}-{m:02d}-01"
-    import calendar as cal
-    end_date = f"{y}-{m:02d}-{cal.monthrange(y, m)[1]}"
-
-    db = get_db()
-    rows = db.execute(
-        "SELECT schedule_date, employee_name, shift_name, finalized FROM monthly_schedules WHERE schedule_date>=? AND schedule_date<=? ORDER BY schedule_date, employee_name",
-        (start_date, end_date)
-    ).fetchall()
-    return jsonify({
-        "ok": True,
-        "data": [{"schedule_date": r["schedule_date"], "employee_name": r["employee_name"], "shift_name": r["shift_name"], "finalized": r["finalized"]} for r in rows],
-        "finalized": any(r["finalized"] for r in rows)
-    })
-
-
-@app.route("/api/monthly-schedules", methods=["POST"])
-def api_monthly_schedules_save():
-    """保存单个单元格的班次（shift_name 为空则删除）"""
-    data = request.get_json(silent=True) or {}
-    schedule_date = (data.get("schedule_date") or "").strip()
-    employee_name = (data.get("employee_name") or "").strip()
-    shift_name = (data.get("shift_name") or "").strip()
-    if not schedule_date or not employee_name:
-        return jsonify({"ok": False, "error": "缺少必填字段"}), 400
-
-    db = get_db()
-    # 检查是否已 finalize
-    y, m = schedule_date.split("-")[:2]
-    locked = db.execute(
-        "SELECT COUNT(*) as c FROM monthly_schedules WHERE schedule_date LIKE ? || '%' AND finalized=1",
-        (f"{y}-{m}",)
-    ).fetchone()["c"]
-    if locked:
-        return jsonify({"ok": False, "error": "该月已最终保存，不可修改"}), 403
-
-    if not shift_name:
-        db.execute("DELETE FROM monthly_schedules WHERE schedule_date=? AND employee_name=?",
-                   (schedule_date, employee_name))
-    else:
-        if shift_name not in ("A班", "B班", "C班"):
-            return jsonify({"ok": False, "error": f"不支持的班次: {shift_name}"}), 400
-        db.execute(
-            "INSERT INTO monthly_schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name, updated_at=datetime('now','localtime')",
-            (schedule_date, employee_name, shift_name)
-        )
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/monthly-schedules/finalize", methods=["POST"])
-def api_monthly_schedules_finalize():
-    """最终保存：将当月数据导入 raw_schedules 并标记为已 finalize"""
-    data = request.get_json(silent=True) or {}
-    year_month = (data.get("year_month") or "").strip()
-    try:
-        y, m = year_month.split("-")
-        y, m = int(y), int(m)
-    except ValueError:
-        return jsonify({"ok": False, "error": "参数 year_month 格式错误"}), 400
-
-    db = get_db()
-    # 检查是否已 finalize
-    if db.execute("SELECT COUNT(*) as c FROM monthly_schedules WHERE schedule_date LIKE ? AND finalized=1",
-                  (f"{y}-{m:02d}-%",)).fetchone()["c"] > 0:
-        return jsonify({"ok": False, "error": "该月已最终保存，不可重复操作"}), 403
-
-    start_date = f"{y}-{m:02d}-01"
-    import calendar as cal
-    end_date = f"{y}-{m:02d}-{cal.monthrange(y, m)[1]}"
-
-    # 读取当月所有 monthly_schedules 记录
-    rows = db.execute(
-        "SELECT schedule_date, employee_name, shift_name FROM monthly_schedules WHERE schedule_date>=? AND schedule_date<=?",
-        (start_date, end_date)
-    ).fetchall()
-
-    if not rows:
-        return jsonify({"ok": False, "error": "该月无排班数据"}), 400
-
-    # 删除当月已有的 raw_schedules
-    db.execute("DELETE FROM raw_schedules WHERE schedule_date>=? AND schedule_date<=?",
-               (start_date, end_date))
-    # 同步删除对应的 schedules
-    db.execute("DELETE FROM schedules WHERE schedule_date>=? AND schedule_date<=?",
-               (start_date, end_date))
-
-    count = 0
-    for r in rows:
-        db.execute(
-            "INSERT INTO raw_schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
-            (r["schedule_date"], r["employee_name"], r["shift_name"])
-        )
-        # 同步到 schedules
-        db.execute(
-            "INSERT INTO schedules(schedule_date, employee_name, shift_name) VALUES(?,?,?) ON CONFLICT(schedule_date, employee_name) DO UPDATE SET shift_name=excluded.shift_name",
-            (r["schedule_date"], r["employee_name"], r["shift_name"])
-        )
-        count += 1
-
-    # 标记为 finalized
-    db.execute("UPDATE monthly_schedules SET finalized=1 WHERE schedule_date>=? AND schedule_date<=?",
-               (start_date, end_date))
-    db.commit()
-    return jsonify({"ok": True, "count": count})
-
-
-@app.route("/api/monthly-schedules/export")
-def api_monthly_schedules_export():
-    """导出月度排班 Excel，表格样式与页面一致"""
-    year_month = request.args.get("year_month", "")
-    try:
-        y, m = year_month.split("-")
-        y, m = int(y), int(m)
-    except ValueError:
-        return jsonify({"ok": False, "error": "参数 year_month 格式错误"}), 400
-
-    import calendar as cal
-    days = cal.monthrange(y, m)[1]
-    start_date = f"{y}-{m:02d}-01"
-    end_date = f"{y}-{m:02d}-{cal.monthrange(y, m)[1]}"
-
-    db = get_db()
-
-    # 读取员工（仅在线组/热线组/售后组，在职）
-    all_emps = db.execute(
-        "SELECT name, team FROM employees WHERE status='active' AND team IN ('在线组','热线组','售后组') ORDER BY team, name"
-    ).fetchall()
-
-    # 读取月度排班数据
-    rows = db.execute(
-        "SELECT schedule_date, employee_name, shift_name FROM monthly_schedules WHERE schedule_date>=? AND schedule_date<=?",
-        (start_date, end_date)
-    ).fetchall()
-    sched_map = {}
-    for r in rows:
-        sched_map[(r["schedule_date"], r["employee_name"])] = r["shift_name"]
-
-    # 读取班次工时
-    shift_rows = db.execute("SELECT name, work_hours FROM shifts").fetchall()
-    shift_hours = {sr["name"]: sr["work_hours"] for sr in shift_rows}
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = f"{y}年{m}月排班"
-
-    # 表头行1：日期
-    headers = ["团队", "姓名"]
-    for d in range(1, days + 1):
-        headers.append(f"{m}/{d}")
-    headers += ["排班工时", "排班天数", "A班天数", "B班天数", "C班天数"]
-    ws.append(headers)
-
-    # 表头行2：星期
-    week_labels = ["日", "一", "二", "三", "四", "五", "六"]
-    week_row = ["", ""]
-    for d in range(1, days + 1):
-        w = cal.weekday(y, m, d)  # 0=Mon...6=Sun
-        week_row.append(week_labels[(w + 1) % 7])
-    week_row += ["", "", "", "", ""]
-    ws.append(week_row)
-
-    # 数据行
-    for emp in all_emps:
-        row_data = [emp["team"], emp["name"]]
-        a_count = b_count = c_count = 0
-        total_hours = 0.0
-        for d in range(1, days + 1):
-            date_str = f"{y}-{m:02d}-{d:02d}"
-            shift = sched_map.get((date_str, emp["name"]), "")
-            row_data.append(shift)
-            if shift == "A班":
-                a_count += 1
-                total_hours += shift_hours.get("A班", 8)
-            elif shift == "B班":
-                b_count += 1
-                total_hours += shift_hours.get("B班", 11)
-            elif shift == "C班":
-                c_count += 1
-                total_hours += shift_hours.get("C班", 8)
-        total_days = a_count + b_count + c_count
-        row_data += [f"{total_hours:.1f}h", f"{total_days}天", f"{a_count}天", f"{b_count}天", f"{c_count}天"]
-        ws.append(row_data)
-
-    # 汇总行
-    summary_labels = ["当日上班人次", "当日A班人数", "当日B班人数", "当日C班人数"]
-    for label in summary_labels:
-        srow = [label, ""]
-        for d in range(1, days + 1):
-            date_str = f"{y}-{m:02d}-{d:02d}"
-            count = 0
-            for emp in all_emps:
-                shift = sched_map.get((date_str, emp["name"]), "")
-                if label == "当日上班人次":
-                    if shift in ("A班", "B班", "C班"):
-                        count += 1
-                elif label == "当日A班人数" and shift == "A班":
-                    count += 1
-                elif label == "当日B班人数" and shift == "B班":
-                    count += 1
-                elif label == "当日C班人数" and shift == "C班":
-                    count += 1
-            srow.append(count if count > 0 else "")
-        srow += ["", "", "", "", ""]
-        ws.append(srow)
-
-    # 设置列宽
-    ws.column_dimensions["A"].width = 10
-    ws.column_dimensions["B"].width = 10
-    for d in range(1, days + 1):
-        ws.column_dimensions[get_column_letter(d + 2)].width = 6
-
-    import io
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return send_file(
-        output,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        as_attachment=True,
-        download_name=f"月度排班_{y}年{m}月.xlsx"
-    )
 
 
 # ==================== 原始排班 API ====================
