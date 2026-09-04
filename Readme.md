@@ -14,10 +14,10 @@ python app.py
 
 # 4. 打开浏览器访问登录页
 # 本地：http://127.0.0.1:5000
-# 云服务器：http://47.102.102.115:5000
+# 云服务器：http://<公网IP>:5000
 ```
 
-默认用户名 `admin`、密码 `paiban2026`，可通过 `python scripts/setup_password.py` 修改。密码哈希存储在 `auth_config.json`（不入 git），机器人查询 token 也在此文件的 `bot_token` 字段。
+默认用户名 `admin`，登录密码通过 `python scripts/setup_password.py` 设置。密码哈希存储在 `auth_config.json`（不入 git），机器人查询 token 也在此文件的 `bot_token` 字段。
 
 ---
 
@@ -627,7 +627,7 @@ CMD ["python", "app.py"]
 
   该逻辑应用于：总览页上班人数统计、工作安排页员工列表、排班表视图筛选、机器人排班查询。换休时长提交时校验不超过当日班次工作时长。
   
-- **登录鉴权**：已启用用户名+密码登录，默认 `admin` / `paiban2026`，通过 `python scripts/setup_password.py` 修改
+- **登录鉴权**：已启用用户名+密码登录，密码通过 `python scripts/setup_password.py` 设置
 - **auth_config.json**：不入 git，首次部署或迁移服务器后需运行 `python scripts/setup_password.py`
 - **数据库备份**：`schedule.db` 需定期备份，建议 crontab 定时执行 `cp schedule.db backup/schedule_$(date +%Y%m%d).db`
 - **文件迁移**：部署到新服务器后，`schedule.db` 和 `auth_config.json` 需从旧环境手动迁移
